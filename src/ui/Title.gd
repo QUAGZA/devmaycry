@@ -107,6 +107,8 @@ func _handle_cli() -> void:
 			if a.has("ffa_size"):
 				Net.lobby["ffa_size"] = int(a["ffa_size"])
 			Net.lobby["bot_fill"] = str(a.get("bots", "false")) == "true"
+			if a.has("switch_policy"):
+				Net.lobby["switch_policy"] = str(a["switch_policy"])
 			var err := Net.host(port, a.has("practice"))
 			if a.has("code"):
 				Net.room_code = str(a["code"]).to_upper()
@@ -277,6 +279,7 @@ func _screen_setup(practice: bool) -> void:
 	_option("PLAYERS (RELIC RUSH)", ["2", "4", "6", "8"], clampi(int(lobby["ffa_size"]) / 2 - 1, 0, 3), func(i: int) -> void: Net.lobby["ffa_size"] = (i + 1) * 2)
 	_check("FILL WITH BOTS", bool(lobby["bot_fill"]), func(v: bool) -> void: Net.lobby["bot_fill"] = v)
 	_option("BOT DIFFICULTY", ["EASY", "MEDIUM", "HARD"], Net.DIFFICULTIES.find(str(lobby["bot_difficulty"])), func(i: int) -> void: Net.lobby["bot_difficulty"] = Net.DIFFICULTIES[i])
+	_option("ROLE SWITCH", ["EVERY ROUND", "AFTER 2 ROUNDS (HALVES)"], 1 if str(lobby.get("switch_policy", "every_round")) == "halves" else 0, func(i: int) -> void: Net.lobby["switch_policy"] = "halves" if i == 1 else "every_round")
 	column.add_child(UiTheme.rule(Palette.STONE))
 	column.add_child(UiTheme.label("Hot Return: attackers steal the Causal Core from the vault and carry it home before it detonates (26 s fuse, Stability Fields pause it). First to 3 rounds, 2-2 goes to overtime pairs. Relic Rush: 5 minutes, first to 25 points.", 14, Palette.STONE, UiTheme.serif_font()))
 	_button("CREATE ROOM" if not practice else "OPEN PRACTICE LOBBY", func() -> void:
@@ -357,6 +360,7 @@ func _screen_lobby() -> void:
 		_option("FFA PLAYERS", ["2", "4", "6", "8"], clampi(int(lobby["ffa_size"]) / 2 - 1, 0, 3), func(i: int) -> void: Net.set_lobby("ffa_size", (i + 1) * 2))
 		_check("FILL WITH BOTS", bool(lobby["bot_fill"]), func(v: bool) -> void: Net.set_lobby("bot_fill", v))
 		_option("BOT DIFFICULTY", ["EASY", "MEDIUM", "HARD"], Net.DIFFICULTIES.find(str(lobby["bot_difficulty"])), func(i: int) -> void: Net.set_lobby("bot_difficulty", Net.DIFFICULTIES[i]))
+		_option("ROLE SWITCH", ["EVERY ROUND", "AFTER 2 ROUNDS (HALVES)"], 1 if str(lobby.get("switch_policy", "every_round")) == "halves" else 0, func(i: int) -> void: Net.set_lobby("switch_policy", "halves" if i == 1 else "every_round"))
 	var teams := HBoxContainer.new()
 	teams.add_theme_constant_override("separation", 12)
 	column.add_child(teams)

@@ -83,8 +83,8 @@ static func history_value(history: Array, t: float) -> float:
 	return float(last[1])
 
 
-static func new_match() -> Dictionary:
-	return CorebreakRules.new_match()
+static func new_match(policy := "every_round") -> Dictionary:
+	return CorebreakRules.new_match(policy)
 
 
 static func attacking_team(m: Dictionary) -> int:

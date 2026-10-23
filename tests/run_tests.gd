@@ -77,14 +77,22 @@ func _test_corebreak_rules() -> void:
 	check(R.resolve({"detonated": false, "defused": false, "attackers_alive": 2, "defenders_alive": 2, "time_left": 0.0, "planted": true}) == "", "timer expiry with plant -> continue to detonation")
 	check(R.resolve({"detonated": false, "defused": false, "attackers_alive": 2, "defenders_alive": 2, "time_left": 10.0, "planted": false}) == "", "live round -> no result")
 	# Match structure
-	var m = R.new_match()
+	var m = R.new_match("halves")
 	check(R.attacking_team(m) == 1, "team 1 attacks in round 1")
 	for i in 2:
 		R.record_round(m, 1)
-	check(R.attacking_team(m) == 2 and m["round"] == 3, "sides swap after round 2")
+	check(R.attacking_team(m) == 2 and m["round"] == 3, "halves policy: sides swap after round 2")
 	R.record_round(m, 1)
 	check(m["winner"] == 1, "first to 3 wins the match")
-	var m2 = R.new_match()
+	var me = R.new_match()
+	check(str(me["policy"]) == "every_round", "default policy alternates roles every round")
+	var seq: Array = []
+	for i in 4:
+		seq.append(R.attacking_team(me))
+		R.record_round(me, 1 if i % 2 == 0 else 2)
+	check(seq == [1, 2, 1, 2], "every_round policy: attackers alternate 1,2,1,2 through regulation")
+	check(me["overtime"] and me["winner"] == 0, "every_round policy: 2-2 still enters overtime pairs")
+	var m2 = R.new_match("halves")
 	R.record_round(m2, 1)
 	R.record_round(m2, 2)
 	R.record_round(m2, 1)

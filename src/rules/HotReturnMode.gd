@@ -8,7 +8,7 @@ const PRE_ROUND_TIME := 5.0
 const ROUND_END_TIME := 6.0
 
 var ms: MatchServer
-var m: Dictionary = HotReturnRules.new_match()
+var m: Dictionary = HotReturnRules.new_match(str(Net.lobby.get("switch_policy", "every_round")))
 var phase := "pre_round"
 var phase_t := PRE_ROUND_TIME
 var time_left := HotReturnRules.ROUND_TIME

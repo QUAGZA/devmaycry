@@ -29,6 +29,7 @@ var lobby: Dictionary = {
 	"ffa_size": 4,
 	"bot_fill": true,
 	"bot_difficulty": "medium",
+	"switch_policy": "every_round",
 	"locked": false,
 	"practice": false,
 }

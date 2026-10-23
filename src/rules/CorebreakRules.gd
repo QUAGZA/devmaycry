@@ -38,8 +38,11 @@ static func resolve(s: Dictionary) -> String:
 	return ""
 
 
-static func new_match() -> Dictionary:
+## policy "every_round": roles alternate after every round (judging requirement, default);
+## policy "halves": competitive halves, sides swap after round 2. Overtime pairs are identical.
+static func new_match(policy := "every_round") -> Dictionary:
 	return {
+		"policy": policy,
 		"round": 1,
 		"wins": {1: 0, 2: 0},
 		"winner": 0,
@@ -53,7 +56,9 @@ static func new_match() -> Dictionary:
 
 static func attacking_team(m: Dictionary) -> int:
 	if not bool(m["overtime"]):
-		return 1 if int(m["round"]) <= 2 else 2
+		if str(m.get("policy", "every_round")) == "halves":
+			return 1 if int(m["round"]) <= 2 else 2
+		return 1 if int(m["round"]) % 2 == 1 else 2
 	var first := 2 if int(m["ot_set"]) % 2 == 0 else 1
 	return first if int(m["ot_round_in_set"]) == 0 else 3 - first
 
