@@ -159,6 +159,11 @@ func _draw() -> void:
 			draw_line(sp, tp, Color(Palette.VERMILION, 0.6), 1.5)
 			draw_circle(sp, 4.0, Palette.VERMILION)
 			draw_arc(tp, 4.0, 0.0, TAU, 12, Palette.VERMILION, 1.5)
+		elif fe is Features.Ladder:
+			var lp2 := xf * fp
+			draw_rect(Rect2(lp2 - Vector2(3, 5), Vector2(6, 10)), Palette.BRASS, false, 1.5)
+			draw_line(lp2 + Vector2(-3, -1.5), lp2 + Vector2(3, -1.5), Palette.BRASS, 1.0)
+			draw_line(lp2 + Vector2(-3, 1.5), lp2 + Vector2(3, 1.5), Palette.BRASS, 1.0)
 	for tp in def.temporal_props:
 		if is_instance_valid(tp):
 			var sp := xf * (Vector2(tp.global_position.x, tp.global_position.z) - origin)
