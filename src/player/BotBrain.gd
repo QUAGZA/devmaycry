@@ -368,10 +368,16 @@ func _decide_hotreturn(rules) -> void:
 			_set_goal(st, "stabilize")
 			return
 		if mode == "cradle" or mode == "dropped" or mode == "locked":
-			if _closest_attacker_to(core_pos, rules) == p.id or rng.randf() < 0.3:
+			var lead_id := _closest_attacker_to(core_pos, rules)
+			if lead_id == p.id or rng.randf() < 0.2:
 				_set_goal(core_pos, "core")
 			else:
-				_set_goal(core_pos + _orbit_offset(7.0), "escort")
+				# push as a group: supporting attackers stay a few metres off the lead attacker
+				var lead: Player = Game.players.get(lead_id)
+				if lead != null and is_instance_valid(lead) and lead.alive:
+					_set_goal(lead.global_position + _orbit_offset(4.0), "escort")
+				else:
+					_set_goal(core_pos + _orbit_offset(7.0), "escort")
 			return
 		if mode == "carried":
 			var c: Player = Game.players.get(int(core["carrier"]))

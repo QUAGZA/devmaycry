@@ -63,8 +63,8 @@ func _process(delta: float) -> void:
 	_t += delta
 	var ang := 0.6 + _t * 0.035
 	var r := 34.0 + sin(_t * 0.07) * 4.0
-	_cam.global_position = Vector3(cos(ang) * r, 7.5 + sin(_t * 0.11) * 1.2, sin(ang) * r * 0.8)
-	_cam.look_at(Vector3(0, 6.0, 0), Vector3.UP)
+	_cam.global_position = Vector3(cos(ang) * r, 15.0 + sin(_t * 0.11) * 1.5, sin(ang) * r * 0.8)
+	_cam.look_at(Vector3(0, 3.0, 0), Vector3.UP)
 	_core.rotate_y(delta * 0.5)
 	_core.position.y = 11.5 + sin(_t * 0.8) * 0.25
 	_core_mat.set_shader_parameter("volatility", 0.3 + 0.25 * sin(_t * 0.4))

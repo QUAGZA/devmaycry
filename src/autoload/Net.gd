@@ -364,6 +364,7 @@ func _process(delta: float) -> void:
 		_search_t -= delta
 		if _search_t <= 0.0:
 			_stop_listen()
+			Game.log_ev("Session", "code_not_found", {"code": _search_code})
 			join_failed.emit("No LAN room with code %s found in 6 s. Check the code and that both devices share the same Wi-Fi. You can also join by IP." % _search_code)
 	if _pending_kick.size() > 0 and peer != null:
 		for id in _pending_kick:

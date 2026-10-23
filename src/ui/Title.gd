@@ -31,9 +31,9 @@ func _ready() -> void:
 		add_child(hero_tex)
 		var shade := ColorRect.new()
 		var grad := Gradient.new()
-		grad.set_color(0, Color(Palette.INK, 0.86))
-		grad.set_color(1, Color(Palette.INK, 0.05))
-		grad.add_point(0.42, Color(Palette.INK, 0.55))
+		grad.set_color(0, Color(Palette.INK, 0.55))
+		grad.set_color(1, Color(Palette.INK, 0.55))
+		grad.add_point(0.5, Color(Palette.INK, 0.12))
 		var gt := GradientTexture2D.new()
 		gt.gradient = grad
 		gt.fill_to = Vector2(1, 0)
@@ -61,11 +61,21 @@ func _ready() -> void:
 	margin.add_theme_constant_override("margin_bottom", 40)
 	add_child(margin)
 	var h := HBoxContainer.new()
+	h.alignment = BoxContainer.ALIGNMENT_CENTER
 	margin.add_child(h)
+	# centred menu panel: subtle border, controlled shadow, consistent padding
+	var panel := PanelContainer.new()
+	var sb := UiTheme.card(Color(Palette.INK, 0.80), Color(Palette.STONE, 0.55), 1, 6, 34)
+	sb.shadow_color = Color(0, 0, 0, 0.35)
+	sb.shadow_size = 22
+	sb.shadow_offset = Vector2(0, 8)
+	panel.add_theme_stylebox_override("panel", sb)
+	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(panel)
 	column = VBoxContainer.new()
-	column.custom_minimum_size = Vector2(620, 0)
+	column.custom_minimum_size = Vector2(560, 0)
 	column.add_theme_constant_override("separation", 10)
-	h.add_child(column)
+	panel.add_child(column)
 	Net.players_changed.connect(_on_players_changed)
 	Net.lobby_changed.connect(_on_players_changed)
 	Net.connected_as_client.connect(func() -> void: _screen_lobby())
@@ -158,8 +168,8 @@ func _button(text: String, cb: Callable, enabled: bool = true) -> Button:
 	b.text = text
 	b.disabled = not enabled
 	b.pressed.connect(cb)
-	b.custom_minimum_size = Vector2(360, 0)
-	b.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	b.custom_minimum_size = Vector2(360, 46)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.add_child(b)
 	return b
 
@@ -240,8 +250,12 @@ func _screen_main() -> void:
 	logo.add_theme_color_override("font_shadow_color", Color(Palette.VERMILION, 0.55))
 	logo.add_theme_constant_override("shadow_offset_x", 6)
 	logo.add_theme_constant_override("shadow_offset_y", 5)
+	logo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(logo)
-	column.add_child(UiTheme.stamp("THE ARENA REMEMBERS.", Palette.MINT, 20))
+	var tag := UiTheme.stamp("THE ARENA REMEMBERS.", Palette.MINT, 20)
+	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(tag)
+	column.get_child(0).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(UiTheme.rule(Palette.STONE))
 	_button("PLAY", func() -> void: _screen_setup(true))
 	_button("HOST LAN GAME", func() -> void: _screen_setup(false))
