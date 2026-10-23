@@ -77,13 +77,17 @@ func _run(step: PackedStringArray, p: Player) -> Dictionary:
 					b |= Player.BTN_FIRE
 			else:
 				yaw = p.yaw + 0.03
-		"nav":
+		"nav", "navy":
 			var target := Vector3(float(step[1]), p.global_position.y, float(step[2]))
+			var flag_i := 3
+			if step[0] == "navy":
+				target = Vector3(float(step[1]), float(step[2]), float(step[3]))
+				flag_i = 4
 			var r := nav_step(p, target)
 			yaw = r["yaw"]
 			move = r["move"]
 			if r["arrived"]:
-				if step.size() > 3 and step[3] == "interact":
+				if step.size() > flag_i and step[flag_i] == "interact":
 					b |= Player.BTN_INTERACT
 				else:
 					done = true
@@ -120,7 +124,7 @@ func nav_step(p: Player, target: Vector3) -> Dictionary:
 		_path_target = target
 	var flat_target := Vector2(target.x, target.z)
 	var here := Vector2(p.global_position.x, p.global_position.z)
-	if here.distance_to(flat_target) < 1.4:
+	if here.distance_to(flat_target) < 1.4 and absf(p.global_position.y - target.y) < 2.5:
 		return {"yaw": p.yaw, "move": Vector2.ZERO, "arrived": true}
 	var goal := target
 	while _path_i < _path.size():

@@ -75,7 +75,9 @@ func _handle_cli() -> void:
 				Net.lobby["ffa_size"] = int(a["ffa_size"])
 			Net.lobby["bot_fill"] = str(a.get("bots", "false")) == "true"
 			var err := Net.host(port, a.has("practice"))
-			Game.log_ev("Cli", "host", {"err": err})
+			if a.has("code"):
+				Net.room_code = str(a["code"]).to_upper()
+			Game.log_ev("Cli", "host", {"err": err, "code": Net.room_code})
 			_screen_lobby()
 			if a.has("autostart"):
 				_auto_start_t = float(a["autostart"])

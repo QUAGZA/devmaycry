@@ -44,6 +44,7 @@ var _quit_t := -1.0
 var _shots: Array = []
 var _shot_elapsed := 0.0
 var _log_snap_t := 0.0
+var _probed := false
 
 
 func _ready() -> void:
@@ -291,6 +292,16 @@ func _physics_process(delta: float) -> void:
 				_spawn_all()
 	if not in_match or world == null:
 		return
+	if args.has("navprobe") and not _probed and server_tick > 5:
+		_probed = true
+		var map_rid: RID = world.get_world_3d().navigation_map
+		for spec in str(args["navprobe"]).split(";"):
+			var v := spec.split(",")
+			var want := Vector3(float(v[0]), float(v[1]), float(v[2]))
+			var closest := NavigationServer3D.map_get_closest_point(map_rid, want)
+			var from := Vector3(float(v[3]), float(v[4]), float(v[5])) if v.size() >= 6 else Vector3.ZERO
+			var path := NavigationServer3D.map_get_path(map_rid, from, want, true)
+			log_ev("Nav", "probe", {"want": [want.x, want.y, want.z], "closest": [snappedf(closest.x, 0.1), snappedf(closest.y, 0.1), snappedf(closest.z, 0.1)], "path_len": path.size(), "path_end": [snappedf(path[path.size() - 1].x, 0.1), snappedf(path[path.size() - 1].y, 0.1), snappedf(path[path.size() - 1].z, 0.1)] if path.size() > 0 else []})
 	if local_player != null and is_instance_valid(local_player):
 		var inp: Array = local_player.gather_input()
 		if multiplayer.is_server():

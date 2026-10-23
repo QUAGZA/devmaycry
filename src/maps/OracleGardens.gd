@@ -57,8 +57,7 @@ func _build_layout() -> void:
 	for a in 4:
 		var ang := a * 90.0
 		var dir := Vector3(cos(deg_to_rad(ang)), 0, sin(deg_to_rad(ang)))
-		var p := dir * 17.0
-		ramp(p + Vector3(0, 0.5, 0), Vector3(6, 0.3, 7.0), -ang + 90.0, -14.0, chalk)
+		slope(dir * 21.5, dir * 13.2 + Vector3(0, 1.2, 0), 6.0, 0.3, chalk)
 	# plaza planters (cover)
 	for a in 8:
 		var ang := a * 45.0 + 22.5
@@ -100,6 +99,10 @@ func _build_layout() -> void:
 	# Sites: A north-east, B south-east, each on its own approach angle
 	_build_site("A", Vector3(40, 0, 26), vermilion_glow, porcelain, mint)
 	_build_site("B", Vector3(40, 0, -26), cobalt_glow, porcelain, mint)
+
+	# PHASE GATES: north-west flank <-> south-east flank, and south-west <-> north-east
+	add_gate_pair(Vector3(-40, 0, 44), 180, Vector3(40, 0, -44), 0, "I")
+	add_gate_pair(Vector3(-40, 0, -44), 0, Vector3(40, 0, 44), 180, "II")
 
 	# Signal lights
 	for p in [Vector3(-50, 3.0, 45), Vector3(50, 3.0, -45), Vector3(0, 9.3, 0)]:

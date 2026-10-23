@@ -108,6 +108,14 @@ func ramp(pos: Vector3, size: Vector3, yaw_deg: float, pitch_deg: float, materia
 	return body
 
 
+## Walkable slope built from its two end points (low end first). Ends overlap the surfaces they join.
+func slope(low: Vector3, high: Vector3, width: float, thickness: float, material: Material) -> StaticBody3D:
+	var length := low.distance_to(high)
+	var body := box((low + high) * 0.5 - Vector3(0, thickness * 0.5, 0), Vector3(width, thickness, length), material, "", true)
+	body.look_at_from_position(body.position, high - Vector3(0, thickness * 0.5, 0), Vector3.UP)
+	return body
+
+
 func cylinder(pos: Vector3, radius: float, height: float, material: Material, walkable: bool = true) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.collision_layer = 1
@@ -210,6 +218,33 @@ func light_env(sun_dir: Vector3, sun_color: Color, sky_top: Color, sky_horizon: 
 	env.fog_sky_affect = 0.1
 	we.environment = env
 	root.add_child(we)
+
+
+func add_gate_pair(a: Vector3, a_yaw: float, b: Vector3, b_yaw: float, gname: String) -> void:
+	var fa := Features.PhaseGate.new()
+	fa.setup(a, a_yaw, b + Basis(Vector3.UP, deg_to_rad(b_yaw)) * Vector3(0, 0, -2.6), b_yaw, gname)
+	features.add_child(fa)
+	var fb := Features.PhaseGate.new()
+	fb.setup(b, b_yaw, a + Basis(Vector3.UP, deg_to_rad(a_yaw)) * Vector3(0, 0, -2.6), a_yaw, gname)
+	features.add_child(fb)
+
+
+func add_zipline(a: Vector3, b: Vector3, zname: String) -> void:
+	var z := Features.Zipline.new()
+	z.setup(a, b, zname)
+	features.add_child(z)
+
+
+func add_sling(pad: Vector3, land: Vector3, flight: float, sname: String) -> void:
+	var v := Features.VectorSling.new()
+	v.setup(pad, land, flight, sname)
+	features.add_child(v)
+
+
+func reset_features() -> void:
+	for f in features.get_children():
+		if f.has_method("drop_all"):
+			f.drop_all()
 
 
 func pick_spawn(role: String, index: int) -> Dictionary:

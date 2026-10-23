@@ -67,6 +67,7 @@ var interact_held := false
 var carrying_core := false
 var frozen := false
 var zip_t := 0.0
+var launch_t := 0.0
 var last_attacker := 0
 var inp_move := Vector2.ZERO
 var inp_buttons := 0
@@ -307,6 +308,8 @@ func server_step(delta: float) -> void:
 		wish = wish.normalized()
 	wish = Basis(Vector3.UP, yaw) * wish
 	var on_floor := is_on_floor()
+	if on_floor and launch_t > 0.0 and velocity.y <= 0.0:
+		launch_t = 0.0
 	if not on_floor:
 		velocity.y -= GRAVITY * delta
 	elif (pressed & BTN_JUMP) != 0 and not staggered:
@@ -319,7 +322,9 @@ func server_step(delta: float) -> void:
 		Game.rpc_fx.rpc("dash", id, global_position)
 	var target := wish * speed
 	var accel := GROUND_ACCEL if on_floor else AIR_ACCEL
-	if dash_t > 0.0:
+	if launch_t > 0.0 and not on_floor:
+		pass
+	elif dash_t > 0.0:
 		velocity.x = dash_dir.x * DASH_SPEED
 		velocity.z = dash_dir.z * DASH_SPEED
 		if velocity.y < 0.0:
@@ -391,6 +396,7 @@ func _tick_timers(delta: float) -> void:
 	stagger_t = maxf(0.0, stagger_t - delta)
 	spawn_protect_t = maxf(0.0, spawn_protect_t - delta)
 	zip_t = maxf(0.0, zip_t - delta)
+	launch_t = maxf(0.0, launch_t - delta)
 	if reload_t > 0.0:
 		reload_t = maxf(0.0, reload_t - delta)
 		if reload_t <= 0.0:
@@ -464,6 +470,8 @@ func _die(killer_id: int, cause: String) -> void:
 	collision_layer = 0
 	carrying_core = false
 	interact_held = false
+	zip_t = 0.0
+	launch_t = 0.0
 	recorder.clear()
 	if Game.match_server != null:
 		Game.match_server.on_player_died(self, killer_id, cause)

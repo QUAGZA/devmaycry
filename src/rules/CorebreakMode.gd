@@ -70,6 +70,7 @@ func _start_round() -> void:
 	detonate_t = 0.0
 	ms.cancel_respawns()
 	ms.clear_echoes("round_reset")
+	ms.def.reset_features()
 	var idx := {1: 0, 2: 0, 0: 0}
 	for p in Game.players.values():
 		if not is_instance_valid(p):
