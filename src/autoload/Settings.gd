@@ -96,8 +96,15 @@ func apply_prefs() -> void:
 	var master := AudioServer.get_bus_index("Master")
 	if master >= 0:
 		AudioServer.set_bus_volume_db(master, linear_to_db(clampf(master_volume, 0.0001, 1.0)))
-	if DisplayServer.get_name() != "headless":
+	if DisplayServer.get_name() != "headless" and not cli_overrides_window():
 		call_deferred("apply_window")
+
+
+static func cli_overrides_window() -> bool:
+	for a in OS.get_cmdline_args():
+		if a in ["--resolution", "--windowed", "--fullscreen", "-w", "-f"]:
+			return true
+	return false
 
 
 ## Applies the chosen resolution; falls back to the largest preset that fits the screen.

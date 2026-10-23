@@ -202,7 +202,7 @@ func _build() -> void:
 	root.add_child(crosshair)
 	var centre := VBoxContainer.new()
 	centre.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	centre.position = Vector2(-400, 130)
+	centre.position = Vector2(-400, 190)
 	centre.size = Vector2(800, 120)
 	centre.alignment = BoxContainer.ALIGNMENT_BEGIN
 	root.add_child(centre)

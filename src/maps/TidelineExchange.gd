@@ -25,26 +25,30 @@ func _build_layout() -> void:
 	light_env(Vector3(0.35, -0.7, -0.5), Color("FFF4E4"), Color("8FA9C4"), Color("DCE3E6"), Color("4E5660"), Color("C9D3D8"), 0.0022)
 
 	# Main deck 120 x 90 with water channels carved as decals
-	box(Vector3(0, -0.5, 0), Vector3(120, 1, 90), stone, "Deck")
+	box(Vector3(0, -0.5, 0), Vector3(150, 1, 90), stone, "Deck")
 	for z in [-45.5, 45.5]:
-		box(Vector3(0, 3.0, z), Vector3(122, 6, 1), indigo, "", false)
-	for x in [-60.5, 60.5]:
+		box(Vector3(0, 3.0, z), Vector3(152, 6, 1), indigo, "", false)
+	for x in [-75.5, 75.5]:
 		box(Vector3(x, 3.0, 0), Vector3(1, 6, 92), indigo, "", false)
 	for z in [-18.0, 0.0, 18.0]:
-		decal(Vector3(0, 0.02, z), Vector2(110, 2.2), water)
-	for i in range(-5, 6):
+		decal(Vector3(0, 0.02, z), Vector2(140, 2.2), water)
+	for i in range(-6, 7):
 		decal(Vector3(i * 11.0, 0.025, 0), Vector2(0.3, 90), mat(Color("9A9283"), 1.0))
 
 	# Spawn quays
 	for i in 4:
-		spawn_point("attack", Vector3(-54, 1.0, -9 + i * 6), -90)
-		spawn_point("defend", Vector3(54, 1.0, -9 + i * 6), 90)
+		spawn_point("attack", Vector3(-68, 1.0, -9 + i * 6), -90)
+		spawn_point("defend", Vector3(68, 1.0, -9 + i * 6), 90)
 	core_spawn = Vector3(-44, 0.6, 0)
-	hot_return_layout(Vector3(-44, 0, 0), Vector3(44, 0, 0), Vector3(-55, 0, 0), Vector3(55, 0, 0), Vector3(-36, 6.0, 30), Vector3(38, 0.3, -24))
+	hot_return_layout(Vector3(-56, 0, 0), Vector3(56, 0, 0), Vector3(-66, 0, 0), Vector3(66, 0, 0), Vector3(-30, 3.0, 30), Vector3(26, 0, 30), 15.0)
 	for sx in [-1.0, 1.0]:
-		box(Vector3(sx * 47, 1.2, 0), Vector3(1.0, 2.4, 10), canvas)
-		box(Vector3(sx * 47, 1.2, 16), Vector3(1.0, 2.4, 6), canvas)
-		box(Vector3(sx * 47, 1.2, -16), Vector3(1.0, 2.4, 6), canvas)
+		box(Vector3(sx * 60, 1.2, 0), Vector3(1.0, 2.4, 10), canvas)
+		box(Vector3(sx * 60, 1.2, 16), Vector3(1.0, 2.4, 6), canvas)
+		box(Vector3(sx * 60, 1.2, -16), Vector3(1.0, 2.4, 6), canvas)
+		box(Vector3(sx * 50, 0.7, -6), Vector3(2.4, 1.4, 2.4), brass)
+		box(Vector3(sx * 50, 0.7, 6), Vector3(2.4, 1.4, 2.4), brass)
+		box(Vector3(sx * 54, 1.3, 12), Vector3(6, 2.6, 2.4), canvas)
+		box(Vector3(sx * 54, 1.3, -12), Vector3(6, 2.6, 2.4), canvas)
 
 	# HIGH ROUTE (north, y = 6): suspended platforms with ramps up at both ends
 	var high_y := 6.0

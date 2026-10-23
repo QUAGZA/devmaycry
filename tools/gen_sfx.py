@@ -110,3 +110,45 @@ write("ui", tone(lambda t: 1500, 0.04, 0.001, 0.035, "sine", 0.3))
 write("dash", lowpass(tone(lambda t: 0, 0.22, 0.01, 0.2, "sine", 0.0, 1.0), 0.12))
 # Teleport / sling: sweep
 write("warp", tone(lambda t: 300 + 1400 * t, 0.35, 0.01, 0.3, "sine", 0.35))
+
+# ---- v2 cues: temporal abilities, Core states, fields, weapons
+# Reverse Entropy: low pull, descending sweep, crisp confirm
+write("rewind", mix(
+    lowpass(tone(lambda t: 70, 0.5, 0.01, 0.45, "sine", 0.7, 0.2), 0.15),
+    tone(lambda t: 1200 - 900 * t / 0.6, 0.6, 0.01, 0.55, "sine", 0.3),
+    [0.0] * int(0.55 * RATE) + tone(lambda t: 1800, 0.05, 0.001, 0.045, "square", 0.25),
+))
+# Fast-Forward: accelerating pulse train with a harsh short transient
+ff = []
+for i in range(14):
+    gap = 0.16 - i * 0.009
+    ff += tone(lambda t: 420 + i * 40, 0.04, 0.001, 0.035, "saw", 0.35) + [0.0] * int(max(0.02, gap) * RATE)
+write("ff", mix(ff, tone(lambda t: 3000 * math.exp(-t * 60), 0.06, 0.001, 0.05, "square", 0.3, 0.6)))
+# Core drop: blunt ceramic knock
+write("core_drop", lowpass(tone(lambda t: 180 * math.exp(-t * 12), 0.25, 0.002, 0.2, "sine", 0.9, 0.4), 0.3))
+# Field enter / exit: soft two-note chords
+write("field_enter", mix(tone(lambda t: 392, 0.35, 0.02, 0.3, "sine", 0.3), tone(lambda t: 587, 0.35, 0.04, 0.3, "sine", 0.22)))
+write("field_exit", mix(tone(lambda t: 587, 0.3, 0.02, 0.25, "sine", 0.25), tone(lambda t: 392, 0.3, 0.05, 0.25, "sine", 0.2)))
+# Volatility warning tick
+write("warn", tone(lambda t: 1046, 0.08, 0.002, 0.07, "square", 0.3))
+# Detonation: long low noise burst with sub thump
+write("detonate", mix(
+    lowpass(tone(lambda t: 0, 1.4, 0.005, 1.3, "sine", 0.0, 1.0), 0.08),
+    lowpass(tone(lambda t: 45 * math.exp(-t * 2.0), 1.2, 0.005, 1.1, "sine", 1.0), 0.2),
+))
+# Restoration: reassembly (rising noise sweep) then a clean chord
+write("restore", mix(
+    lowpass(tone(lambda t: 0, 0.45, 0.2, 0.2, "sine", 0.0, 0.8), 0.35),
+    [0.0] * int(0.4 * RATE) + tone(lambda t: 659, 0.35, 0.01, 0.3, "sine", 0.3),
+    [0.0] * int(0.4 * RATE) + tone(lambda t: 988, 0.35, 0.02, 0.3, "sine", 0.2),
+))
+# Weapons
+write("shot_shotgun", mix(lowpass(tone(lambda t: 0, 0.22, 0.001, 0.2, "sine", 0.0, 1.0), 0.18), tone(lambda t: 110 * math.exp(-t * 8), 0.3, 0.002, 0.28, "sine", 0.9)))
+write("shot_sniper", mix(tone(lambda t: 2600 * math.exp(-t * 50), 0.08, 0.001, 0.07, "square", 0.5), lowpass(tone(lambda t: 0, 0.5, 0.002, 0.45, "sine", 0.0, 0.8), 0.12)))
+write("shot_mg", mix(tone(lambda t: 1500 * math.exp(-t * 45), 0.07, 0.001, 0.06, "square", 0.4), lowpass(tone(lambda t: 120, 0.09, 0.002, 0.08, "sine", 0.0, 0.9), 0.3)))
+# Footstep
+write("step", lowpass(tone(lambda t: 0, 0.06, 0.002, 0.05, "sine", 0.0, 0.7), 0.25))
+# Zip / portal / pad
+write("zip", tone(lambda t: 500 + 200 * math.sin(t * 30), 0.6, 0.02, 0.5, "saw", 0.12, 0.2))
+write("portal", mix(tone(lambda t: 220 + 660 * t, 0.4, 0.01, 0.35, "sine", 0.3), tone(lambda t: 880 - 500 * t, 0.4, 0.05, 0.3, "sine", 0.2)))
+write("pad", mix(lowpass(tone(lambda t: 90, 0.2, 0.005, 0.18, "sine", 0.8, 0.3), 0.3), tone(lambda t: 300 + 900 * t, 0.3, 0.01, 0.25, "sine", 0.3)))

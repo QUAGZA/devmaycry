@@ -129,7 +129,7 @@ func _field_index_at(pos: Vector3) -> int:
 	for i in ms.def.fields.size():
 		var f: Dictionary = ms.def.fields[i]
 		var fp: Vector3 = f["position"]
-		if Vector2(pos.x - fp.x, pos.z - fp.z).length() <= float(f.get("radius", HotReturnRules.FIELD_RADIUS)) and absf(pos.y - fp.y) < 5.0:
+		if Vector2(pos.x - fp.x, pos.z - fp.z).length() <= float(f.get("radius", HotReturnRules.FIELD_RADIUS)) and absf(pos.y - fp.y) < 8.0:
 			return i
 	return -1
 

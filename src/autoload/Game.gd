@@ -68,7 +68,7 @@ func _ready() -> void:
 		_shots.sort()
 	log_ev("Boot", "ready", {"args": args, "headless": DisplayServer.get_name() == "headless"})
 	if DisplayServer.get_name() != "headless":
-		if not OS.get_cmdline_args().has("--resolution"):
+		if not Settings.cli_overrides_window():
 			Settings.apply_window()
 		var ws := DisplayServer.window_get_size()
 		var ss := DisplayServer.screen_get_size()
@@ -317,6 +317,30 @@ func _physics_process(delta: float) -> void:
 				_spawn_all()
 	if not in_match or world == null:
 		return
+	if args.has("routeprobe") and not _probed and server_tick > 5 and map_def != null and mode_id == "hot_return":
+		_probed = true
+		var map_rid: RID = world.get_world_3d().navigation_map
+		var vault: Vector3 = map_def.vaults.get(2, Vector3.ZERO)
+		var stab: Vector3 = map_def.stabilizers.get(1, Vector3.ZERO)
+		var fa: Vector3 = map_def.fields[0]["position"]
+		var fb: Vector3 = map_def.fields[1]["position"]
+		var routes := {
+			"direct": [vault, stab], "via_A": [vault, fa, stab], "via_B": [vault, fb, stab],
+			"via_B_then_A": [vault, fb, fa, stab], "via_A_then_B": [vault, fa, fb, stab],
+		}
+		for key in routes:
+			var pts: Array = routes[key]
+			var total := 0.0
+			var ok := true
+			for i in range(1, pts.size()):
+				var path := NavigationServer3D.map_get_path(map_rid, pts[i - 1], pts[i], true)
+				if path.size() < 2 or path[path.size() - 1].distance_to(pts[i]) > 4.0:
+					ok = false
+				for j in range(1, path.size()):
+					total += path[j - 1].distance_to(path[j])
+			var pauses := 0.0 if key == "direct" else (7.0 if pts.size() == 3 else 14.0)
+			var e := HotReturnRules.route_exposure(total, pauses)
+			log_ev("Route", key, {"map": map_id, "metres": snappedf(total, 0.1), "carry_s": snappedf(float(e["carry"]), 0.1), "exposure_s": snappedf(float(e["exposure"]), 0.1), "volatility": snappedf(float(e["volatility"]), 0.1), "reachable": ok})
 	if args.has("navprobe") and not _probed and server_tick > 5:
 		_probed = true
 		var map_rid: RID = world.get_world_3d().navigation_map

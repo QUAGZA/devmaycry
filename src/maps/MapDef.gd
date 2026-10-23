@@ -183,7 +183,7 @@ func site(site_id: String, pos: Vector3, radius: float) -> void:
 	sites[site_id] = {"position": pos, "radius": radius}
 
 
-func hot_return_layout(vault1: Vector3, vault2: Vector3, stab1: Vector3, stab2: Vector3, field_a: Vector3, field_b: Vector3, radius: float = 12.0) -> void:
+func hot_return_layout(vault1: Vector3, vault2: Vector3, stab1: Vector3, stab2: Vector3, field_a: Vector3, field_b: Vector3, radius: float = 15.0) -> void:
 	vaults = {1: vault1, 2: vault2}
 	stabilizers = {1: stab1, 2: stab2}
 	fields = [{"position": field_a, "radius": radius}, {"position": field_b, "radius": radius}]

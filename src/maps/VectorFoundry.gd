@@ -22,28 +22,32 @@ func _build_layout() -> void:
 	var cobalt_glow := mat(Palette.COBALT, 0.5, 0.0, Palette.COBALT, 2.0)
 	light_env(Vector3(-0.2, -0.85, -0.45), Color("FFE2C4"), Color("C8B9AD"), Color("E9D9C6"), Color("4A3A33"), Color("D7C4B2"), 0.002)
 
-	box(Vector3(0, -0.5, 0), Vector3(120, 1, 100), bone, "Floor")
+	box(Vector3(0, -0.5, 0), Vector3(150, 1, 100), bone, "Floor")
 	for z in [-50.5, 50.5]:
-		box(Vector3(0, 4.0, z), Vector3(122, 8, 1), terracotta, "", false)
-	for x in [-60.5, 60.5]:
+		box(Vector3(0, 4.0, z), Vector3(152, 8, 1), terracotta, "", false)
+	for x in [-75.5, 75.5]:
 		box(Vector3(x, 4.0, 0), Vector3(1, 8, 102), terracotta, "", false)
 	# floor markings: concentric rings and vectors
 	var marking := mat(Color("A34F34"), 1.0)
 	for r in [12.0, 24.0, 36.0]:
 		ring(Vector3(0, 0.03, 0), r, 0.18, marking)
-	for i in range(-5, 6):
+	for i in range(-6, 7):
 		decal(Vector3(i * 11.0, 0.02, 0), Vector2(0.25, 100), marking)
 
 	# Spawn bays
 	for i in 4:
-		spawn_point("attack", Vector3(-54, 1.0, -9 + i * 6), -90)
-		spawn_point("defend", Vector3(54, 1.0, -9 + i * 6), 90)
+		spawn_point("attack", Vector3(-68, 1.0, -9 + i * 6), -90)
+		spawn_point("defend", Vector3(68, 1.0, -9 + i * 6), 90)
 	core_spawn = Vector3(-44, 0.6, 0)
-	hot_return_layout(Vector3(-44, 0, 0), Vector3(44, 0, 0), Vector3(-55, 0, 0), Vector3(55, 0, 0), Vector3(0, 3.0, 32), Vector3(38, 0, -26))
+	hot_return_layout(Vector3(-56, 0, 0), Vector3(56, 0, 0), Vector3(-66, 0, 0), Vector3(66, 0, 0), Vector3(-26, 0, -32), Vector3(26, 0, -32), 15.0)
 	for sx in [-1.0, 1.0]:
-		box(Vector3(sx * 47, 1.4, 0), Vector3(1.2, 2.8, 10), cobalt)
-		box(Vector3(sx * 47, 1.4, 17), Vector3(1.2, 2.8, 8), cobalt)
-		box(Vector3(sx * 47, 1.4, -17), Vector3(1.2, 2.8, 8), cobalt)
+		box(Vector3(sx * 60, 1.4, 0), Vector3(1.2, 2.8, 10), cobalt)
+		box(Vector3(sx * 60, 1.4, 17), Vector3(1.2, 2.8, 8), cobalt)
+		box(Vector3(sx * 60, 1.4, -17), Vector3(1.2, 2.8, 8), cobalt)
+		cylinder(Vector3(sx * 50, 1.0, -7), 1.3, 2.0, terracotta)
+		cylinder(Vector3(sx * 50, 1.0, 7), 1.3, 2.0, terracotta)
+		box(Vector3(sx * 54, 1.2, 13), Vector3(5, 2.4, 1.2), bone)
+		box(Vector3(sx * 54, 1.2, -13), Vector3(5, 2.4, 1.2), bone)
 
 	# CENTRAL RING: raised annular platform (y = 4) around a sculpture well, ramps on 4 sides
 	var ring_y := 4.0

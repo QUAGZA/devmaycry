@@ -25,30 +25,36 @@ func _build_layout() -> void:
 	light_env(Vector3(-0.45, -0.8, 0.35), Color("FFE9CC"), Color("B9C9DA"), Color("E6DCC8"), Color("6E685C"), Color("D9D0BE"), 0.0015)
 
 	# Floor plates (140 x 100) and perimeter
-	box(Vector3(0, -0.5, 0), Vector3(140, 1, 100), chalk, "Floor")
+	box(Vector3(0, -0.5, 0), Vector3(160, 1, 100), chalk, "Floor")
 	for z in [-50.5, 50.5]:
-		box(Vector3(0, 2.5, z), Vector3(142, 5, 1), stone, "", false)
-	for x in [-70.5, 70.5]:
+		box(Vector3(0, 2.5, z), Vector3(162, 5, 1), stone, "", false)
+	for x in [-80.5, 80.5]:
 		box(Vector3(x, 2.5, 0), Vector3(1, 5, 102), stone, "", false)
 	# Floor plate seams (decor)
 	var seam := mat(Palette.STONE.darkened(0.25), 1.0)
-	for i in range(-6, 7):
+	for i in range(-8, 9):
 		decal(Vector3(i * 10.0, 0.02, 0), Vector2(0.25, 100), seam)
 	for j in range(-4, 5):
-		decal(Vector3(0, 0.02, j * 10.0), Vector2(140, 0.25), seam)
+		decal(Vector3(0, 0.02, j * 10.0), Vector2(160, 0.25), seam)
 
 	# Spawn courts: attackers west (x<0), defenders east (x>0)
-	box(Vector3(-56, 1.0, 0), Vector3(1.2, 2.0, 16), mint, "AttackCourtWall")
-	box(Vector3(-56, 1.0, -22), Vector3(1.2, 2.0, 10), mint)
-	box(Vector3(-56, 1.0, 22), Vector3(1.2, 2.0, 10), mint)
-	box(Vector3(56, 1.0, 0), Vector3(1.2, 2.0, 16), mint, "DefendCourtWall")
-	box(Vector3(56, 1.0, -22), Vector3(1.2, 2.0, 10), mint)
-	box(Vector3(56, 1.0, 22), Vector3(1.2, 2.0, 10), mint)
+	box(Vector3(-66, 1.0, 0), Vector3(1.2, 2.0, 16), mint, "AttackCourtWall")
+	box(Vector3(-66, 1.0, -22), Vector3(1.2, 2.0, 10), mint)
+	box(Vector3(-66, 1.0, 22), Vector3(1.2, 2.0, 10), mint)
+	box(Vector3(66, 1.0, 0), Vector3(1.2, 2.0, 16), mint, "DefendCourtWall")
+	box(Vector3(66, 1.0, -22), Vector3(1.2, 2.0, 10), mint)
+	box(Vector3(66, 1.0, 22), Vector3(1.2, 2.0, 10), mint)
+	# vault-side cover: low ceramic planters flanking each cradle
+	for sx in [-1.0, 1.0]:
+		for z in [-7.0, 7.0]:
+			box(Vector3(sx * 52.0, 0.6, z), Vector3(1.4, 1.2, 3.0), mint)
+		box(Vector3(sx * 60.0, 1.3, -13.0), Vector3(3.0, 2.6, 1.0), porcelain)
+		box(Vector3(sx * 60.0, 1.3, 13.0), Vector3(3.0, 2.6, 1.0), porcelain)
 	for i in 4:
-		spawn_point("attack", Vector3(-63, 1.0, -12 + i * 8), -90)
-		spawn_point("defend", Vector3(63, 1.0, -12 + i * 8), 90)
+		spawn_point("attack", Vector3(-73, 1.0, -12 + i * 8), -90)
+		spawn_point("defend", Vector3(73, 1.0, -12 + i * 8), 90)
 	core_spawn = Vector3(-50, 0.6, 0)
-	hot_return_layout(Vector3(-50, 0, 0), Vector3(50, 0, 0), Vector3(-63, 0, 0), Vector3(63, 0, 0), Vector3(-22, 2.0, 22), Vector3(22, 2.0, -22))
+	hot_return_layout(Vector3(-58, 0, 0), Vector3(58, 0, 0), Vector3(-62, 0, 0), Vector3(62, 0, 0), Vector3(-27, 0, 29), Vector3(27, 0, 29), 15.0)
 
 	# Central plaza: raised terrace ring with ramps and a monolith
 	cylinder(Vector3(0, 0.6, 0), 14.0, 1.2, porcelain)

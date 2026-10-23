@@ -170,7 +170,8 @@ func _init() -> void:
 	head.add_child(cam)
 	viewmodel = Node3D.new()
 	viewmodel.name = "Viewmodel"
-	viewmodel.position = Vector3(0.34, -0.27, -0.62)
+	viewmodel.position = Vector3(0.27, -0.23, -0.5)
+	viewmodel.scale = Vector3(0.58, 0.58, 0.58)
 	viewmodel.visible = false
 	cam.add_child(viewmodel)
 	_build_viewmodel()
@@ -801,7 +802,7 @@ func _process(delta: float) -> void:
 		_fov_target = float(Weapons.get_data(weapon_id)["ads_fov"]) if local_ads and alive else 86.0
 		cam.fov = lerpf(cam.fov, _fov_target, minf(1.0, 12.0 * delta))
 	if viewmodel.visible:
-		viewmodel.position = Vector3(0.34, -0.27 - _view_kick * 0.02, -0.62 + _view_kick * 0.08)
+		viewmodel.position = Vector3(0.27, -0.23 - _view_kick * 0.02, -0.5 + _view_kick * 0.06)
 		viewmodel.rotation.x = _view_kick * 0.12
 	if multiplayer.is_server():
 		if _local:
