@@ -34,6 +34,7 @@ unusable, start with `-- --force-windowed`, or delete `%APPDATA%\Godot\app_userd
 | R / Shift / Space / C / Ctrl | Reload / sprint / jump / crouch / dash |
 | Q | Entropy ability: attackers **Reverse Entropy**, defenders **Fast-Forward**. Once per round, no cooldown |
 | E | Hold at a zipline anchor to ride; the Core is picked up by walking over it |
+| Ladders | Walk into a ladder and keep moving forward to climb, backward to descend, jump to push off (not while carrying the Core) |
 | Caps Lock | Tactical map (north-up); Esc or Caps Lock closes it |
 | Tab / Esc | Scoreboard / pause (local only) |
 
@@ -54,8 +55,9 @@ to overtime pairs. Tagged temporal barricades restore for 2 s as a rewinding pla
 
 ## Offline practice / host / join
 
-- **PRACTICE** or **PLAY**: choose mode, map (Oracle Gardens, Tideline Exchange, Vector Foundry), team size or
-  player count, bot fill and difficulty (Easy / Medium / Hard), then open the lobby and **START MATCH**.
+- **PLAY** (offline) or **HOST LAN GAME**: choose mode, map (Oracle Gardens, Tideline Exchange, Vector Foundry, or the
+  Developer Test Arena marked as a test map), team size or player count, bot fill and difficulty, and ROLE SWITCH
+  (every round by default, or after two rounds), then open the lobby and **START MATCH**.
 - **LAN ROOMS → HOST**: the lobby shows a 6-character room code and your IP. The first host triggers the Windows
   Firewall prompt: click **Allow** (UDP 24642 game, 24643 beacon).
 - **LAN ROOMS → JOIN**: enter the code (6 s LAN discovery) or the host IP. Same network only; there is no
@@ -76,4 +78,6 @@ Headless user arguments (after `--`): `--role=host|join|code`, `--ip`, `--port`,
 `--autostart=<s>`, `--min_players`, `--mode=hot_return|relic_rush`, `--map`, `--bots=true|false`, `--team_size`,
 `--ffa_size`, `--bot_difficulty`, `--auto=<pattern|seq:...>`, `--log-snap`, `--quit-after-sec`, `--screenshot-at`,
 `--screenshot-title`, `--force-windowed`, `--routeprobe`, `--navprobe`, `--kill-local-at`, `--open-map-at`,
-`--allow-empty-team`, `--settings-test=write|read`, `--settings-path=user://<file>`, `--open-settings`, `--perf`, `--winprobe`.
+`--allow-empty-team`, `--settings-test=write|read`, `--settings-path=user://<file>`, `--open-settings`, `--perf`, `--winprobe`,
+`--switch_policy=every_round|halves`, `--diag=<flags>` (rendering isolation), `--bot-trace`. Map ids: `oracle_gardens`, `tideline_exchange`,
+`vector_foundry`, `dev_test_arena` (and `legacy_tideline`, `legacy_foundry`).

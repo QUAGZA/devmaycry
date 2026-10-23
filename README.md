@@ -18,6 +18,7 @@ gates, ziplines, vector slings), bots at three difficulties, LAN rooms with 6-ch
 - What is implemented, tested, partial or missing: [ECHO_CLASH_BUILD_STATUS.md](ECHO_CLASH_BUILD_STATUS.md)
 - Test plan with results and the manual checklist: [ECHO_CLASH_TEST_PLAN.md](ECHO_CLASH_TEST_PLAN.md)
 - Audit of the v1 baseline and the v2 milestone checklist: [ECHO_CLASH_AUDIT.md](ECHO_CLASH_AUDIT.md)
+- Judging requirements with evidence: [JUDGING_CHECKLIST.md](JUDGING_CHECKLIST.md)
 
 ## Layout
 
@@ -28,7 +29,7 @@ src/player/              Player (server-simulated FPS body, rewind, weapons), Ta
 src/rules/               HotReturnRules/Mode, RelicRules/RelicRushMode, EchoBuffer (6 s history), Corebreak (legacy)
 src/weapons/             Weapons data (recoil, spread, falloff), ProjectileManager
 src/match/               Match scene, MatchServer, Objectives (Core, fields, Stabilizer, FF ring), Fx
-src/maps/                MapDef builder, OracleGardens, TidelineExchange, VectorFoundry, features/ (gates, ziplines, slings, TemporalProp)
+src/maps/                MapDef + MapKit toolkit, OracleSanctuary / TidelineHall / FoundryLoop (final maps), OracleGardens (Developer Test Arena), legacy Tideline/Foundry, features/ (gates, ziplines, slings, ladders, TemporalProp)
 src/shaders/             palimpsest_toon, ink_outline, sea, core, rewind, fastforward_ring, stability_field, portal_ring, surface, minimap_mask
 src/style/               Style material library, MaterialPreview scene
 src/ui/                  Title/menus + settings, MainMenu3D hero, HUD, Minimap, theme, AutoPilot (scripted input for tests)

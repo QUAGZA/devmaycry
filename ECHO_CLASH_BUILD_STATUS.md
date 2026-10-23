@@ -3,6 +3,28 @@
 Engine: **Godot 4.7.2.stable.official**, standard build. Project `D:\devmaycry`. Packaged `build/EchoClash.exe`.
 Every "tested" claim points to a log or screenshot under `build/` produced by the commands in `ECHO_CLASH_SETUP.md`.
 
+## Final upgrade (2026-10-24, branch `final-upgrade`, checkpoint tag `pre-final-upgrade`)
+
+| Area | Result | Evidence |
+|---|---|---|
+| Black stippling (root cause) | Fixed. Isolation harness (`--diag=...`) showed the artifact appears only with SSAO under MSAA (14.3 % near-black pixels vs 0.07 %); swapping in standard materials removed it; shader bisection pinned it to `palimpsest_toon` writing a perturbed triplanar detail normal into NORMAL, i.e. into the normal buffer SSAO reads (back-facing normals -> full occlusion). Detail now feeds lighting through a varying; the buffer keeps the geometric normal. MSAA + SSAO + outline: 0.37 %. | `build/shots/diag/compare_grid.png`, `before_after_msaa.png`, `diag_*.log` |
+| Graphics apply order | Effects toggles (SSAO/glow/fog) were applied before the match world existed; now re-applied after scene ready. | `Match.gd` |
+| Bot tower loop | Reproduced (old code: 52 stuck jumps in 80 s, 51 within 14 m of the tower). Root cause: unprojected goals inside colliders + arrival measured to the unreachable point + jump every 1.4 s. Fixed: goals snapped to the navmesh, arrival at the reachable path end, staged recovery (replan, sidestep, one jump, abandon + blacklist). New code: 0 stuck jumps on all maps. | `botcmp_old_*.log`, `botcmp_new_*.log`, `botnew2_*.log` |
+| Three new maps | Oracle Gardens (`OracleSanctuary.gd`), Tideline Exchange (`TidelineHall.gd`), Vector Foundry (`FoundryLoop.gd`), built with `MapKit` (walls, concave slabs, floors with sunken holes, stairs, roofed rooms, ladders). Original Oracle plaza kept as **Developer Test Arena**; old Tideline/Foundry kept as `legacy_*` (CLI only). | `oA_grid.png`, `tB_grid.png`, `fC_grid.png`, `fullmaps.png`, `route_*` |
+| Ladders | New feature: server-authoritative climbing, navigation links for bots, minimap icon. | `tB.log`, `fC.log` |
+| Shot retrieval | Reverse Entropy retrieves the owner's latest missed shot (<= 8 s, rifle/sniper/mg), shows a mote + thin tether returning to the muzzle, replays it once from the muzzle along the recorded direction with normal collision. Host + client test: replay hit the defender once (24 dmg). | `retrieve_host.log`, `retrieve3_zoom.png` |
+| Temporal props | Intact / damaged / destroyed / restored / expired; never restores collision inside a living player. | `prop_safety*_host.log` |
+| Role switching | Every round by default, halves optional (lobby option, `--switch_policy`), tests for both. | `roles.log`, `lan_full_host.log`, `tests/run_tests.gd` |
+| Menu / settings | Centred bordered menu panel over the live map; map selector lists the three maps + the test arena (marked); two-column settings. | `menu_v4_1_00.png`, `settings_v5_1_00.png` |
+| LAN | Second instance joined by room code over the LAN beacon and stayed connected for a full 4-round match. | `lan_full_*.log` |
+| Performance (packaged exe) | 1080p, High, 8 players: Oracle 206-224 FPS, Tideline 224-237, Foundry 249-269. Intermittent 30 FPS samples seen only while the Godot editor was open and reimporting changed files. | `exeperf_*.log` |
+
+### Known gaps after the final upgrade
+- Bots navigate all maps but are not tuned for objective play against full defending teams; in 4v4 tests attackers rarely reach the Core on Oracle/Foundry (they did on Tideline: 7 pickups, 2 detonations) and carriers do not yet path through Stability Fields reliably.
+- Two physical machines and human playtesting were not available; LAN was verified with two instances on one PC.
+- Map art on the three new layouts is the shared toolkit look (toon materials, columns, trims); less bespoke dressing than the earlier plaza art pass.
+- The first-person weapon follows the hand bone without IK; ADS is an offset.
+
 ## Visual production pass (2026-10-24, after the Hot Return rebuild)
 
 | Area | What changed | Evidence |
