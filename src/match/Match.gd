@@ -7,6 +7,8 @@ func _ready() -> void:
 	var def := Maps.make(Game.map_id)
 	def.build(world)
 	def.bake_nav()
+	if DisplayServer.get_name() != "headless":
+		Settings.apply_graphics()
 	var objectives := Node.new()
 	objectives.name = "Objectives"
 	objectives.set_script(load("res://src/match/Objectives.gd"))
@@ -62,6 +64,13 @@ func _release_spectate() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("map") and Game.results.is_empty() and not Game.paused_local:
+		Game.map_open = not Game.map_open
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("pause") and Game.results.is_empty():
-		Game.set_paused(not Game.paused_local)
+		if Game.map_open:
+			Game.map_open = false
+		else:
+			Game.set_paused(not Game.paused_local)
 		get_viewport().set_input_as_handled()

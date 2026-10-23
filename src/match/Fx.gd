@@ -54,7 +54,7 @@ func _on_fx(kind: String, _id: int, pos: Vector3) -> void:
 			Sfx.play("dash", -10.0)
 		"teleport":
 			_spark(pos + Vector3(0, 1.0, 0), Palette.MINT, 0.5, 1.2)
-			Sfx.play("warp", -8.0)
+			Sfx.play("portal", -6.0)
 		"echo_hit":
 			_spark(pos + Vector3(0, 1.2, 0), Palette.VERMILION, 0.3, 0.5)
 		"echo_damaged":
@@ -65,6 +65,12 @@ func _on_fx(kind: String, _id: int, pos: Vector3) -> void:
 			var sh = Game.players.get(_id)
 			if sh == null or not is_instance_valid(sh) or not sh.is_local():
 				_spark(pos, Palette.BRASS, 0.06, 0.3)
+		"warn":
+			Sfx.play("warn", -6.0)
+		"field_enter":
+			Sfx.play("field_enter", -8.0)
+		"field_exit":
+			Sfx.play("field_exit", -8.0)
 		"impact_player":
 			_spark(pos, Palette.VERMILION, 0.2, 0.4)
 		"switch":
@@ -72,33 +78,36 @@ func _on_fx(kind: String, _id: int, pos: Vector3) -> void:
 				Sfx.play("reload", -10.0, 1.4)
 		"restore":
 			_spark(pos + Vector3(0, 1.0, 0), Palette.MINT, 0.5, 1.6)
+			Sfx.play("restore", -4.0)
 		"impact":
 			_spark(pos + Vector3(0, 0.8, 0), Palette.PORCELAIN, 0.15, 0.35)
 		"detonate":
 			_spark(pos + Vector3(0, 1.5, 0), Palette.VERMILION, 1.2, 9.0)
-			Sfx.play("elim", 0.0, 0.5)
+			Sfx.play("detonate", 0.0)
 		"core_pickup":
 			_spark(pos + Vector3(0, 1.5, 0), Palette.BRASS, 0.4, 1.2)
 			Sfx.play("capture", -6.0)
 		"core_drop":
 			_spark(pos + Vector3(0, 1.0, 0), Palette.BRASS, 0.4, 1.0)
+			Sfx.play("core_drop", -4.0)
 		"stabilize":
 			_spark(pos + Vector3(0, 1.5, 0), Palette.MINT, 1.0, 4.0)
 			Sfx.play("sting", -4.0)
 		"rewind_start":
 			_spark(pos + Vector3(0, 1.2, 0), Palette.COBALT, 0.6, 2.0)
-			Sfx.play("echo_cast", -4.0)
+			Sfx.play("rewind", -2.0)
 		"ff_start":
 			_spark(pos + Vector3(0, 0.3, 0), Palette.VERMILION, 0.6, 3.0)
-			Sfx.play("echo_break", -6.0, 1.3)
+			Sfx.play("ff", -3.0)
 		"reload":
 			if _id == Game.local_id():
 				Sfx.play("reload", -6.0)
 		"zip":
 			_spark(pos + Vector3(0, 1.5, 0), Palette.BRASS, 0.4, 0.8)
+			Sfx.play("zip", -8.0)
 		"sling":
 			_spark(pos + Vector3(0, 0.5, 0), Palette.VERMILION, 0.5, 1.4)
-			Sfx.play("warp", -8.0, 0.8)
+			Sfx.play("pad", -6.0)
 
 
 func _on_damage(victim_id: int, _attacker_id: int, _amount: float, _hp_after: float, _cause: String) -> void:

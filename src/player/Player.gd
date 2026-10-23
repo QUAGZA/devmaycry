@@ -123,6 +123,7 @@ var shape: CollisionShape3D
 var viewmodel: Node3D
 var tag: Label3D
 var vm_mat: StandardMaterial3D
+var rig: HumanoidRig
 
 
 func _init() -> void:
@@ -145,7 +146,11 @@ func _init() -> void:
 	body_mat = StandardMaterial3D.new()
 	body_mat.roughness = 0.55
 	body_mesh.material_override = body_mat
+	body_mesh.visible = false
 	add_child(body_mesh)
+	rig = HumanoidRig.new()
+	rig.name = "Rig"
+	add_child(rig)
 	var visor := MeshInstance3D.new()
 	var vm := BoxMesh.new()
 	vm.size = Vector3(0.36, 0.14, 0.2)
@@ -300,6 +305,7 @@ func setup(id_: int, info: Dictionary) -> void:
 	glyph_index = int(info.get("glyph", 0))
 	color = Palette.player_color(info)
 	body_mat.albedo_color = color
+	rig.build(color, Palette.glyph(glyph_index))
 	tag.text = "%s %s" % [Palette.glyph(glyph_index), pname]
 	tag.modulate = color
 	name = "P%d" % id
@@ -309,6 +315,7 @@ func make_local() -> void:
 	_local = true
 	cam.current = true
 	body_mesh.visible = false
+	rig.visible = false
 	tag.visible = false
 	viewmodel.visible = true
 	if DisplayServer.get_name() != "headless" and Game.autopilot == null:
@@ -340,7 +347,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var sens := Settings.mouse_sensitivity * (Player.ff_sens_mult() if ff_until > 0.0 else 1.0)
 		yaw -= event.relative.x * sens
-		pitch = clampf(pitch - event.relative.y * sens, -1.45, 1.45)
+		pitch = clampf(pitch - event.relative.y * sens * (-1.0 if Settings.invert_y else 1.0), -1.45, 1.45)
 		yaw = wrapf(yaw, -PI, PI)
 
 
@@ -790,16 +797,18 @@ func apply_state(s: Array) -> void:
 
 
 func _apply_flags_visual() -> void:
-	body_mesh.visible = alive and not _local and not _spectated
+	body_mesh.visible = false
+	rig.visible = alive and not _local and not _spectated
 	tag.visible = alive and not _local and not _spectated
 	shape.disabled = not alive
 
 
 func _process(delta: float) -> void:
 	_view_kick = lerpf(_view_kick, 0.0, 14.0 * delta)
+	_animate_rig(delta)
 	if _local:
 		var local_ads := ads if multiplayer.is_server() else (Input.is_action_pressed("ads") and Game.autopilot == null and not Game.paused_local)
-		_fov_target = float(Weapons.get_data(weapon_id)["ads_fov"]) if local_ads and alive else 86.0
+		_fov_target = float(Weapons.get_data(weapon_id)["ads_fov"]) if local_ads and alive else Settings.fov
 		cam.fov = lerpf(cam.fov, _fov_target, minf(1.0, 12.0 * delta))
 	if viewmodel.visible:
 		viewmodel.position = Vector3(0.27, -0.23 - _view_kick * 0.02, -0.5 + _view_kick * 0.06)
@@ -818,6 +827,14 @@ func _process(delta: float) -> void:
 		rotation.y = lerp_angle(rotation.y, _net_yaw, 0.35)
 		head.rotation.x = lerpf(head.rotation.x, _net_pitch, 0.35)
 	head.position.y = lerpf(head.position.y, CROUCH_HEIGHT if crouching else STAND_HEIGHT, 12.0 * delta)
+
+
+func _animate_rig(delta: float) -> void:
+	if rig == null or not rig.visible:
+		return
+	var hspeed := Vector3(velocity.x, 0.0, velocity.z).length()
+	var floor_now := (flags & F_FLOOR) != 0 if not multiplayer.is_server() else is_on_floor()
+	rig.animate(delta, hspeed, floor_now, crouching, head.rotation.x, rewind_t > 0.0)
 
 
 func kick_view() -> void:

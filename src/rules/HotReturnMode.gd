@@ -20,6 +20,7 @@ var charges: Dictionary = {}          # id -> {"re": spent?, "ff": spent?}
 var ff_field := {"active": false, "pos": Vector3.ZERO, "until": 0.0, "owner": 0}
 var result := ""
 var last_result_reason := ""
+var _was_in_field := false
 
 
 func _init(server: MatchServer) -> void:
@@ -177,6 +178,9 @@ func _step_core(delta: float) -> void:
 		var pos: Vector3 = core["pos"]
 		var fi := _field_index_at(pos)
 		var in_field := fi >= 0
+		if in_field != _was_in_field:
+			_was_in_field = in_field
+			Game.rpc_fx.rpc("field_enter" if in_field else "field_exit", int(core["carrier"]), pos)
 		var allowance := float(field_allowance[fi]) if in_field else 0.0
 		var r := HotReturnRules.volatility_step(float(core["v"]), delta, true, in_field, allowance, ff_covers(pos))
 		if in_field and float(r["used"]) > 0.0:
@@ -185,6 +189,7 @@ func _step_core(delta: float) -> void:
 		core["v"] = r["v"]
 		if int(before / 25.0) != int(float(core["v"]) / 25.0) and float(core["v"]) < 100.0:
 			Game.rpc_notice.rpc("CORE VOLATILITY %d%%" % int(core["v"]), 1.2)
+			Game.rpc_fx.rpc("warn", 0, pos)
 		if float(core["v"]) >= 100.0 and not bool(core["detonated"]):
 			core["detonated"] = true
 			core["mode"] = "detonated"

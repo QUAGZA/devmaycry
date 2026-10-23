@@ -19,6 +19,8 @@ var vaults: Dictionary = {}        # team side -> cradle position
 var stabilizers: Dictionary = {}   # team side -> home Stabilizer position
 var fields: Array = []             # [{"position", "radius"}] Stability Fields, off the direct route
 var temporal_props: Array = []     # TemporalProp nodes
+var footprints: Array = []         # [{node, w, d, kind}] for the minimap
+var extent := Vector2(80, 50)      # half-size of the playable footprint
 var root: Node3D = null
 var nav: NavigationRegion3D = null
 var geometry: Node3D = null
@@ -65,18 +67,28 @@ func bake_nav() -> void:
 
 
 # ---------------------------------------------------------------- helpers
-func mat(color: Color, rough: float = 0.9, metal: float = 0.0, emissive: Color = Color.BLACK, emissive_energy: float = 1.0) -> StandardMaterial3D:
+func mat(color: Color, rough: float = 0.9, metal: float = 0.0, emissive: Color = Color.BLACK, emissive_energy: float = 1.0) -> Material:
 	var key := "%s|%f|%f|%s|%f" % [color.to_html(), rough, metal, emissive.to_html(), emissive_energy]
 	if _mats.has(key):
 		return _mats[key]
+	if emissive == Color.BLACK:
+		var sm := ShaderMaterial.new()
+		sm.shader = load("res://src/shaders/surface.gdshader")
+		sm.set_shader_parameter("albedo", color)
+		sm.set_shader_parameter("accent", color.darkened(0.22).lerp(Palette.COBALT_DARK, 0.08))
+		sm.set_shader_parameter("roughness", rough)
+		sm.set_shader_parameter("metallic", metal)
+		sm.set_shader_parameter("tile", 0.3)
+		sm.set_shader_parameter("wear", 0.55)
+		_mats[key] = sm
+		return sm
 	var m := StandardMaterial3D.new()
 	m.albedo_color = color
 	m.roughness = rough
 	m.metallic = metal
-	if emissive != Color.BLACK:
-		m.emission_enabled = true
-		m.emission = emissive
-		m.emission_energy_multiplier = emissive_energy
+	m.emission_enabled = true
+	m.emission = emissive
+	m.emission_energy_multiplier = emissive_energy
 	_mats[key] = m
 	return m
 
@@ -103,6 +115,10 @@ func box(pos: Vector3, size: Vector3, material: Material, label: String = "", wa
 	if walkable:
 		body.add_to_group("navgeo")
 	geometry.add_child(body)
+	if size.x >= 100.0 and size.y <= 1.5:
+		extent = Vector2(size.x * 0.5, size.z * 0.5)
+	elif not (size.y >= 4.5 and (size.x > 100.0 or size.z > 80.0)):
+		footprints.append({"node": body, "w": size.x, "d": size.z, "kind": "box"})
 	return body
 
 
@@ -117,6 +133,8 @@ func slope(low: Vector3, high: Vector3, width: float, thickness: float, material
 	var length := low.distance_to(high)
 	var body := box((low + high) * 0.5 - Vector3(0, thickness * 0.5, 0), Vector3(width, thickness, length), material, "", true)
 	body.look_at_from_position(body.position, high - Vector3(0, thickness * 0.5, 0), Vector3.UP)
+	if footprints.size() > 0 and footprints[footprints.size() - 1]["node"] == body:
+		footprints[footprints.size() - 1]["kind"] = "ramp"
 	return body
 
 
@@ -142,6 +160,7 @@ func cylinder(pos: Vector3, radius: float, height: float, material: Material, wa
 	if walkable:
 		body.add_to_group("navgeo")
 	geometry.add_child(body)
+	footprints.append({"node": body, "w": radius * 2.0, "d": radius * 2.0, "kind": "cyl"})
 	return body
 
 

@@ -14,6 +14,14 @@ func _ready() -> void:
 		_players.append(p)
 
 
+func bus_for(name: String) -> String:
+	if name.begins_with("shot") or name == "reload":
+		return "Weapons"
+	if name == "ui":
+		return "UI"
+	return "Effects"
+
+
 func play(name: String, volume_db: float = 0.0, pitch: float = 1.0) -> void:
 	if DisplayServer.get_name() == "headless":
 		return
@@ -23,6 +31,7 @@ func play(name: String, volume_db: float = 0.0, pitch: float = 1.0) -> void:
 	for p in _players:
 		if not p.playing:
 			p.stream = stream
+			p.bus = bus_for(name) if AudioServer.get_bus_index(bus_for(name)) >= 0 else "Master"
 			p.volume_db = volume_db + linear_to_db(clampf(Settings.sfx_volume, 0.0001, 1.0))
 			p.pitch_scale = pitch
 			p.play()

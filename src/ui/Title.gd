@@ -17,6 +17,23 @@ func _ready() -> void:
 	bg.color = Palette.INK
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
+	if DisplayServer.get_name() != "headless":
+		var hero := MainMenu3D.new()
+		hero.size = Vector2i(1280, 720)
+		add_child(hero)
+		var hero_tex := TextureRect.new()
+		hero_tex.texture = hero.get_texture()
+		hero_tex.set_anchors_preset(Control.PRESET_FULL_RECT)
+		hero_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		hero_tex.stretch_mode = TextureRect.STRETCH_SCALE
+		hero_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hero_tex.modulate = Color(1, 1, 1, 0.85)
+		add_child(hero_tex)
+		var shade := ColorRect.new()
+		shade.color = Color(Palette.INK, 0.55)
+		shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+		shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(shade)
 	var marks := Control.new()
 	marks.set_anchors_preset(Control.PRESET_FULL_RECT)
 	marks.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -202,11 +219,12 @@ func _screen_main() -> void:
 	column.add_child(UiTheme.label("ECHO\nCLASH", 96, Palette.PORCELAIN, UiTheme.display_font()))
 	column.add_child(UiTheme.stamp("THE ARENA REMEMBERS.", Palette.MINT, 20))
 	column.add_child(UiTheme.rule(Palette.STONE))
-	_button("PLAY / OFFLINE PRACTICE", func() -> void: _screen_setup(true))
-	_button("HOST LAN ROOM", func() -> void: _screen_setup(false))
-	_button("JOIN ROOM", func() -> void: _screen_join())
-	_button("SETTINGS / CONTROLS", func() -> void: _screen_settings())
-	_button("EXIT", func() -> void: get_tree().quit())
+	_button("PLAY", func() -> void: _screen_setup(false))
+	_button("LAN ROOMS", func() -> void: _screen_join())
+	_button("PRACTICE", func() -> void: _screen_setup(true))
+	_button("SETTINGS", func() -> void: _screen_settings())
+	_button("CREDITS / ABOUT", func() -> void: _screen_credits())
+	_button("QUIT", func() -> void: get_tree().quit())
 	column.add_child(UiTheme.rule(Palette.STONE))
 	column.add_child(UiTheme.label("Room codes work on the same LAN / Wi-Fi only. There is no internet matchmaking in this build.", 14, Palette.STONE, UiTheme.serif_font()))
 	_status_line()
@@ -357,34 +375,100 @@ func _on_players_changed() -> void:
 	_lobby_roster.add_child(UiTheme.label("%d human(s) connected. Bots are added when the match starts." % Net.human_count(), 13, Palette.STONE, UiTheme.serif_font()))
 
 
+func _slider(label: String, minv: float, maxv: float, step: float, value: float, cb: Callable) -> HSlider:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	column.add_child(row)
+	var l := UiTheme.stamp(label, Palette.MINT, 13)
+	l.custom_minimum_size = Vector2(170, 0)
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(l)
+	var s := HSlider.new()
+	s.min_value = minv
+	s.max_value = maxv
+	s.step = step
+	s.value = value
+	s.custom_minimum_size = Vector2(300, 0)
+	s.value_changed.connect(cb)
+	row.add_child(s)
+	return s
+
+
 func _screen_settings() -> void:
 	_clear()
-	_header("SETTINGS / CONTROLS", "CALIBRATION")
-	column.add_child(UiTheme.stamp("MOUSE SENSITIVITY", Palette.MINT, 13))
-	var sens := HSlider.new()
-	sens.min_value = 0.0005
-	sens.max_value = 0.006
-	sens.step = 0.0001
-	sens.value = Settings.mouse_sensitivity
-	sens.custom_minimum_size = Vector2(400, 0)
-	sens.value_changed.connect(func(v: float) -> void: Settings.mouse_sensitivity = v)
-	column.add_child(sens)
-	column.add_child(UiTheme.stamp("MASTER VOLUME", Palette.MINT, 13))
-	var vol := HSlider.new()
-	vol.min_value = 0.0
-	vol.max_value = 1.0
-	vol.step = 0.05
-	vol.value = Settings.master_volume
-	vol.custom_minimum_size = Vector2(400, 0)
-	vol.value_changed.connect(func(v: float) -> void: Settings.master_volume = v)
-	column.add_child(vol)
+	var snap := Settings.snapshot()
+	_header("SETTINGS", "CALIBRATION", "Changes apply when you press APPLY. Revert restores the saved values.")
+	var res_names := []
+	var res_list := []
+	for r in Settings.RESOLUTIONS:
+		res_names.append("%d x %d" % [r.x, r.y])
+		res_list.append(r)
+	var native := DisplayServer.screen_get_size()
+	res_names.append("NATIVE %d x %d" % [native.x, native.y])
+	res_list.append(native)
+	var cur := res_list.find(Settings.resolution)
+	_option("RESOLUTION", res_names, maxi(cur, 0), func(i: int) -> void: Settings.resolution = res_list[i])
 	_check("FULLSCREEN", Settings.fullscreen, func(v: bool) -> void: Settings.fullscreen = v)
+	_option("GRAPHICS PRESET", ["LOW", "MEDIUM", "HIGH"], Settings.PRESETS.find(Settings.preset), func(i: int) -> void: Settings.preset = Settings.PRESETS[i])
+	_option("FRAME CAP", ["30", "60", "120", "144", "UNLIMITED"], maxi(Settings.FPS_CAPS.find(Settings.max_fps), 1), func(i: int) -> void: Settings.max_fps = Settings.FPS_CAPS[i])
+	_check("VSYNC", Settings.vsync, func(v: bool) -> void: Settings.vsync = v)
+	_slider("MOUSE SENSITIVITY", 0.0005, 0.006, 0.0001, Settings.mouse_sensitivity, func(v: float) -> void: Settings.mouse_sensitivity = v)
+	_slider("FIELD OF VIEW", 70.0, 105.0, 1.0, Settings.fov, func(v: float) -> void: Settings.fov = v)
+	_check("INVERT Y", Settings.invert_y, func(v: bool) -> void: Settings.invert_y = v)
+	_slider("RETICLE SIZE", 0.6, 1.8, 0.1, Settings.reticle_size, func(v: float) -> void: Settings.reticle_size = v)
+	_slider("CAMERA SHAKE", 0.0, 1.0, 0.1, Settings.shake, func(v: float) -> void: Settings.shake = v)
+	_check("HEAD BOB", Settings.head_bob, func(v: bool) -> void: Settings.head_bob = v)
+	_slider("MASTER VOLUME", 0.0, 1.0, 0.05, Settings.master_volume, func(v: float) -> void: Settings.master_volume = v)
+	for b in ["Music", "Weapons", "Effects", "Ambience", "UI"]:
+		var bus_name: String = b
+		_slider(bus_name.to_upper() + " VOLUME", 0.0, 1.0, 0.05, float(Settings.bus_volumes[bus_name]), func(v: float) -> void: Settings.bus_volumes[bus_name] = v)
 	column.add_child(UiTheme.rule(Palette.STONE))
-	var controls := UiTheme.label("WASD  move          MOUSE  aim\nLMB   Pulse Caster  R      reload\nSHIFT sprint        SPACE  jump\nC     crouch        CTRL   dash\nQ     Echo replay   E      interact / plant / defuse / traverse\nTAB   scoreboard    ESC    pause", 16, Palette.PORCELAIN, UiTheme.mono_font())
-	column.add_child(controls)
-	_button("SAVE AND BACK", func() -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	column.add_child(row)
+	var apply := Button.new()
+	apply.text = "APPLY"
+	apply.pressed.connect(func() -> void:
 		Settings.save_prefs()
-		_screen_main())
+		Settings.apply_window()
+		_set_status("Settings applied and saved." + (" " + Settings.last_window_note if Settings.last_window_note != "" else ""), Palette.MINT))
+	row.add_child(apply)
+	var revert := Button.new()
+	revert.text = "REVERT"
+	revert.pressed.connect(func() -> void:
+		Settings.restore(snap)
+		Settings.apply_prefs()
+		_screen_settings()
+		_set_status("Reverted to the saved settings.", Palette.BRASS))
+	row.add_child(revert)
+	var reset := Button.new()
+	reset.text = "RESET TO DEFAULTS"
+	reset.pressed.connect(func() -> void:
+		Settings.reset_defaults()
+		_screen_settings()
+		_set_status("Defaults restored. Press APPLY to keep them.", Palette.BRASS))
+	row.add_child(reset)
+	_button("CONTROLS", func() -> void: _screen_controls())
+	_button("BACK", func() -> void: _screen_main())
+	_status_line()
+
+
+func _screen_controls() -> void:
+	_clear()
+	_header("CONTROLS", "INPUT MAP")
+	var controls := UiTheme.label("WASD  move               MOUSE      aim\nLMB   fire               RMB        aim down sights\n1 2 3 4  rifle / shotgun / sniper / machine gun\nR     reload             SHIFT      sprint\nSPACE jump               C          crouch\nCTRL  dash               E          pick up / interact / zipline\nQ     entropy ability (attack: Reverse  ·  defend: Fast-Forward)  once per round\nCAPS LOCK tactical map   TAB        scoreboard\nESC   pause", 16, Palette.PORCELAIN, UiTheme.mono_font())
+	column.add_child(controls)
+	_button("BACK", func() -> void: _screen_settings())
+	_status_line()
+
+
+func _screen_credits() -> void:
+	_clear()
+	_header("CREDITS / ABOUT", "THE ARENA REMEMBERS")
+	column.add_child(UiTheme.label("ECHO CLASH is a hackathon build in Godot 4.7.2. Everything in the arena is generated in code: geometry, materials, shaders, sounds, player figures and UI. Identity: PALIMPSEST / ARCHITECTURE OF BROKEN TIME.\n\nHot Return: attackers steal the Causal Core and carry it home before it detonates. Attackers reverse their own recent route (Reverse Entropy); defenders accelerate local entropy (Fast-Forward). Each ability is once per round, no cooldown.\n\nRelic Rush: five-minute free-for-all with Memory Shards and a rotating Relay Beacon.\n\nLAN only: room codes resolve on the same network. No accounts, no telemetry, no internet matchmaking.", 15, Palette.PORCELAIN, UiTheme.serif_font()))
+	column.get_child(column.get_child_count() - 1).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.get_child(column.get_child_count() - 1).custom_minimum_size = Vector2(620, 0)
+	_button("BACK", func() -> void: _screen_main())
 	_status_line()
 
 

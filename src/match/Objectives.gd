@@ -16,6 +16,9 @@ var stabilizer: Node3D = null
 var field_nodes: Array = []
 var ff_ring: MeshInstance3D = null
 var core_mat: StandardMaterial3D = null
+var core_shader: ShaderMaterial = null
+var ff_disc: MeshInstance3D = null
+var ff_life := 0.0
 
 
 func _process(delta: float) -> void:
@@ -46,8 +49,14 @@ func _build() -> void:
 	im.emission_enabled = true
 	im.emission = Palette.VERMILION
 	im.emission_energy_multiplier = 3.0
-	inner.material_override = im
 	core_mat = im
+	core_shader = ShaderMaterial.new()
+	core_shader.shader = load("res://src/shaders/core.gdshader")
+	inner.material_override = core_shader
+	sm.radius = 0.45
+	sm.height = 0.9
+	sm.radial_segments = 48
+	sm.rings = 24
 	core_mesh.add_child(inner)
 	for i in 2:
 		var ring := MeshInstance3D.new()
@@ -227,12 +236,16 @@ func _build_hotreturn() -> void:
 		var n := Node3D.new()
 		n.position = f["position"]
 		var rad := float(f.get("radius", 12.0))
-		var ring := _ring_mesh(rad, 0.35, Palette.MINT, 1.6)
-		ring.position = Vector3(0, 0.12, 0)
+		var ring := MeshInstance3D.new()
+		var disc := PlaneMesh.new()
+		disc.size = Vector2(rad * 2.0, rad * 2.0)
+		ring.mesh = disc
+		var fsm := ShaderMaterial.new()
+		fsm.shader = load("res://src/shaders/stability_field.gdshader")
+		fsm.set_shader_parameter("remaining", 1.0)
+		ring.material_override = fsm
+		ring.position = Vector3(0, 0.08, 0)
 		n.add_child(ring)
-		var inner := _ring_mesh(rad * 0.5, 0.15, Palette.PORCELAIN, 1.0)
-		inner.position = Vector3(0, 0.1, 0)
-		n.add_child(inner)
 		var beam := MeshInstance3D.new()
 		var bb := CylinderMesh.new()
 		bb.top_radius = 0.15
@@ -249,6 +262,15 @@ func _build_hotreturn() -> void:
 	ff_ring = _ring_mesh(8.0, 0.4, Palette.VERMILION, 3.0)
 	ff_ring.visible = false
 	holder.add_child(ff_ring)
+	ff_disc = MeshInstance3D.new()
+	var fd := PlaneMesh.new()
+	fd.size = Vector2(16.4, 16.4)
+	ff_disc.mesh = fd
+	var ffm := ShaderMaterial.new()
+	ffm.shader = load("res://src/shaders/fastforward_ring.gdshader")
+	ff_disc.material_override = ffm
+	ff_disc.visible = false
+	holder.add_child(ff_disc)
 
 
 func _update_hotreturn(delta: float) -> void:
@@ -267,6 +289,8 @@ func _update_hotreturn(delta: float) -> void:
 	var pulse := 1.0 + 0.08 * sin(_bob * (2.0 + 10.0 * k))
 	core_mat.emission = col
 	core_mat.emission_energy_multiplier = 2.0 + 4.0 * k
+	core_shader.set_shader_parameter("volatility", k)
+	core_shader.set_shader_parameter("frozen", 1.0 if mode == "locked" else 0.0)
 	core_mesh.scale = Vector3.ONE * pulse
 	core_mesh.rotate_y(delta * (0.8 + 3.0 * k))
 	match mode:
@@ -305,18 +329,20 @@ func _update_hotreturn(delta: float) -> void:
 		var rem := float(fields[i].get("remaining", 0.0))
 		var fn: Dictionary = field_nodes[i]
 		fn["label"].text = "STABILITY FIELD %s / %0.1f s" % [["A", "B"][i % 2], rem]
-		var fmat: StandardMaterial3D = fn["ring"].material_override
-		var fcol := Palette.MINT if rem > 0.0 else Palette.STONE
-		fmat.albedo_color = fcol
-		fmat.emission = fcol
+		var fmat: ShaderMaterial = fn["ring"].material_override
+		fmat.set_shader_parameter("remaining", clampf(rem / 7.0, 0.0, 1.0))
 		fn["beam"].visible = rem > 0.0
 	var ff: Dictionary = live.get("ff", {})
 	if bool(ff.get("active", false)):
 		ff_ring.visible = true
 		ff_ring.global_position = Vector3(ff.get("pos", Vector3.ZERO)) + Vector3(0, 0.2, 0)
 		ff_ring.scale = Vector3.ONE * (1.0 + 0.05 * sin(_bob * 12.0))
+		ff_disc.visible = true
+		ff_disc.global_position = Vector3(ff.get("pos", Vector3.ZERO)) + Vector3(0, 0.12, 0)
+		ff_disc.material_override.set_shader_parameter("life", 1.0 - clampf(float(ff.get("left", 0.0)) / 3.0, 0.0, 1.0))
 	else:
 		ff_ring.visible = false
+		ff_disc.visible = false
 
 
 func _update_relic(_delta: float) -> void:

@@ -35,6 +35,7 @@ var match_server: MatchServer = null
 var autopilot = null
 var projectiles: ProjectileManager = null
 var paused_local := false
+var map_open := false
 var echoes: Dictionary = {}
 var props: Dictionary = {}
 var menu_message := ""
@@ -257,6 +258,7 @@ func on_peer_left(id: int) -> void:
 func return_to_menu(message: String = "", keep_session: bool = false) -> void:
 	menu_message = message
 	in_match = false
+	map_open = false
 	_waiting_spawn = false
 	_clear_match_nodes()
 	open_lobby_on_menu = keep_session and Net.connected
@@ -391,6 +393,7 @@ func _process(delta: float) -> void:
 		var ms := Time.get_ticks_msec()
 		if ms > 1000 and _probe_stage == 0:
 			_probe_stage = 1
+			log_ev("Win", "cli", {"args": OS.get_cmdline_args(), "override": Settings.cli_overrides_window(), "pref_fs": Settings.fullscreen})
 			log_ev("Win", "probe", {"stage": 1, "size": DisplayServer.window_get_size(), "mode": DisplayServer.window_get_mode(), "fs_const": DisplayServer.WINDOW_MODE_FULLSCREEN, "max_const": DisplayServer.WINDOW_MODE_MAXIMIZED, "screen": DisplayServer.screen_get_size(), "scale": DisplayServer.screen_get_scale(), "pref_fs": Settings.fullscreen, "pref_res": Settings.resolution})
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 			DisplayServer.window_set_size(Vector2i(1920, 1080))
@@ -416,6 +419,8 @@ func _process(delta: float) -> void:
 			_take_screenshot(0.0)
 	if world != null and in_match:
 		_shot_elapsed += delta
+		if args.has("open-map-at") and _shot_elapsed >= float(args["open-map-at"]):
+			map_open = true
 		if not _shots.is_empty() and _shot_elapsed >= _shots[0]:
 			var at: float = _shots.pop_front()
 			_take_screenshot(at)
@@ -572,13 +577,15 @@ func rpc_recoil(dyaw: float, dpitch: float) -> void:
 @rpc("authority", "call_local", "unreliable")
 func rpc_muzzle(shooter_id: int, weapon: String) -> void:
 	var p = players.get(shooter_id)
-	var pitch_by := {"rifle": 1.0, "shotgun": 0.6, "sniper": 0.45, "mg": 1.15}
+	var cue_by := {"rifle": "shot", "shotgun": "shot_shotgun", "sniper": "shot_sniper", "mg": "shot_mg"}
+	var cue: String = cue_by.get(weapon, "shot")
 	if p != null and is_instance_valid(p):
 		if p.is_local():
 			p.kick_view()
-			Sfx.play("shot", -5.0, float(pitch_by.get(weapon, 1.0)) * randf_range(0.98, 1.02))
+			Sfx.play(cue, -5.0, randf_range(0.98, 1.02))
 		else:
-			Sfx.play("shot", -16.0, float(pitch_by.get(weapon, 1.0)) * randf_range(0.95, 1.05))
+			var d: float = local_player.global_position.distance_to(p.global_position) if local_player != null and is_instance_valid(local_player) else 30.0
+			Sfx.play(cue, -10.0 - clampf(d / 6.0, 0.0, 18.0), randf_range(0.95, 1.05))
 		fx.emit("muzzle", shooter_id, p.eye_position() + p.aim_dir() * 0.8)
 
 

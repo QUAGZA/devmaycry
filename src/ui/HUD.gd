@@ -38,6 +38,11 @@ var _flash_t := 0.0
 var _feed_items: Array = []
 var _last_warn := -1
 var _last_ads := false
+var minimap_vp: SubViewport
+var minimap: Minimap
+var minimap_tex: TextureRect
+var fullmap_panel: PanelContainer
+var fullmap: Minimap
 var vol_box: VBoxContainer
 var vol_lbl: Label
 var vol_bar: ColorRect
@@ -139,10 +144,28 @@ func _build() -> void:
 	ffa_box = VBoxContainer.new()
 	sc.add_child(ffa_box)
 
-	# Top right: kill feed
+	# Top right: circular minimap, kill feed to its left
+	minimap_vp = SubViewport.new()
+	minimap_vp.size = Vector2i(220, 220)
+	minimap_vp.transparent_bg = true
+	minimap_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	minimap = Minimap.new()
+	minimap.size = Vector2(220, 220)
+	minimap_vp.add_child(minimap)
+	add_child(minimap_vp)
+	minimap_tex = TextureRect.new()
+	minimap_tex.texture = minimap_vp.get_texture()
+	minimap_tex.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	minimap_tex.position = Vector2(-244, 18)
+	minimap_tex.size = Vector2(220, 220)
+	var mm := ShaderMaterial.new()
+	mm.shader = load("res://src/shaders/minimap_mask.gdshader")
+	minimap_tex.material = mm
+	minimap_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(minimap_tex)
 	feed_box = VBoxContainer.new()
 	feed_box.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	feed_box.position = Vector2(-380, 18)
+	feed_box.position = Vector2(-640, 18)
 	feed_box.size = Vector2(356, 200)
 	feed_box.alignment = BoxContainer.ALIGNMENT_BEGIN
 	root.add_child(feed_box)
@@ -247,6 +270,18 @@ func _build() -> void:
 	_build_pause()
 	_build_results()
 	_build_scoreboard()
+	fullmap_panel = PanelContainer.new()
+	fullmap_panel.set_anchors_preset(Control.PRESET_CENTER)
+	fullmap_panel.position = Vector2(-520, -330)
+	fullmap_panel.size = Vector2(1040, 660)
+	fullmap_panel.add_theme_stylebox_override("panel", UiTheme.card(Color(Palette.INK, 0.9), Palette.PORCELAIN, 1, 2, 10))
+	fullmap_panel.visible = false
+	fullmap_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(fullmap_panel)
+	fullmap = Minimap.new()
+	fullmap.full = true
+	fullmap.custom_minimum_size = Vector2(1020, 640)
+	fullmap_panel.add_child(fullmap)
 
 
 func _ability_card(key: String, label: String) -> Dictionary:
@@ -352,7 +387,11 @@ func _on_notice(text: String, seconds: float) -> void:
 
 func _on_kill(killer_name: String, victim_name: String, cause: String, killer_id: int, victim_id: int) -> void:
 	var l := UiTheme.label("", 15, Palette.PORCELAIN, UiTheme.mono_font())
-	var verb := "ERASED" if cause == "pulse" else ("ECHOED" if cause == "echo" else "LOST")
+	var verb := "LOST"
+	if cause in ["pulse", "rifle", "shotgun", "sniper", "mg"]:
+		verb = "ERASED"
+	elif cause == "echo":
+		verb = "ECHOED"
 	l.text = "%s  %s  %s" % [killer_name, verb, victim_name]
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	var me := Game.local_id()
@@ -562,6 +601,8 @@ func _process(delta: float) -> void:
 		elif p.carrying_core:
 			hint = "CARRYING THE RESONANCE CORE / hold E inside a site to plant"
 		hint_lbl.text = hint
+		if minimap.view_radius != 42.0:
+			pass
 		var prog: Dictionary = Game.live.get("interaction", {})
 		if not prog.is_empty() and int(prog.get("player", 0)) == p.id:
 			progress_box.visible = true
@@ -592,6 +633,8 @@ func _process(delta: float) -> void:
 			keep.append(it)
 	_feed_items = keep
 	pause_panel.visible = Game.paused_local and Game.results.is_empty()
+	fullmap_panel.visible = Game.map_open and Game.results.is_empty()
+	minimap_tex.visible = not Game.map_open
 	crosshair.visible = p != null and is_instance_valid(p) and p.alive and not Game.paused_local and Game.results.is_empty()
 	var sb := (Input.is_action_pressed("scoreboard") and Game.autopilot == null) or Game.args.has("show-scoreboard")
 	if sb != scoreboard_panel.visible:
@@ -684,8 +727,8 @@ func _draw_crosshair() -> void:
 	var c := Palette.VERMILION if _hit_t > 0.0 else Palette.PORCELAIN
 	var p := Game.local_player
 	var ads_now := p != null and is_instance_valid(p) and p.ads
-	var gap := 3.0 if ads_now else 6.0
-	var len := 7.0 if ads_now else 9.0
+	var gap := (3.0 if ads_now else 6.0) * Settings.reticle_size
+	var len := (7.0 if ads_now else 9.0) * Settings.reticle_size
 	var w := 2.0
 	if ads_now and p.weapon_id == "sniper":
 		crosshair.draw_arc(Vector2.ZERO, 120.0, 0.0, TAU, 96, Color(c, 0.9), 2.0)

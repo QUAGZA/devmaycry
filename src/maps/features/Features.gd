@@ -74,6 +74,16 @@ class PhaseGate extends Area3D:
 		ring.position = Vector3(0, 1.9, 0)
 		ring.material_override = Features.glow_mat(Palette.MINT, 2.5)
 		add_child(ring)
+		var surface := MeshInstance3D.new()
+		var surf_mesh := PlaneMesh.new()
+		surf_mesh.size = Vector2(3.2, 3.2)
+		surface.mesh = surf_mesh
+		surface.rotation_degrees = Vector3(90, 0, 0)
+		surface.position = Vector3(0, 1.9, 0)
+		var psm := ShaderMaterial.new()
+		psm.shader = load("res://src/shaders/portal_ring.gdshader")
+		surface.material_override = psm
+		add_child(surface)
 		var frame := MeshInstance3D.new()
 		var bm := BoxMesh.new()
 		bm.size = Vector3(4.4, 0.4, 0.6)

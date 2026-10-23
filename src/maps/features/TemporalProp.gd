@@ -171,7 +171,6 @@ func apply_state(new_state: String, new_version: int, t: float) -> void:
 				f["node"].visible = true
 			_anim_dir = -1
 			_anim_t = 0.0
-			Sfx.play("echo_materialize", -6.0)
 			Game.fx.emit("restore", prop_id, global_position)
 
 
