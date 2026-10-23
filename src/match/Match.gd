@@ -42,6 +42,10 @@ func _ready() -> void:
 	objectives.set_script(load("res://src/match/Objectives.gd"))
 	add_child(objectives)
 	Game.on_match_scene_ready(world, def)
+	if DisplayServer.get_name() != "headless":
+		# graphics toggles that target the match environment need Game.world, which is set just above
+		Settings.apply_graphics()
+		get_tree().create_timer(2.5).timeout.connect(func() -> void: Diag.apply(world))
 	_start_ambience(def)
 	if DisplayServer.get_name() != "headless":
 		get_tree().create_timer(0.8).timeout.connect(func() -> void:

@@ -34,6 +34,13 @@ var err_pitch := 0.0
 var err_t := 0.0
 var stuck_t := 0.0
 var stuck_pos := Vector3.ZERO
+var stuck_count := 0          # consecutive stuck episodes on the current goal
+var jumped_this_goal := false # at most one recovery jump per goal (no jump spam)
+var sidestep_t := 0.0
+var sidestep_dir := 1.0
+var blocked_goals: Array = [] # [{pos, until}] goals abandoned as unreachable, avoided for a while
+var raw_goal := Vector3.ZERO
+var trace_t := 0.0
 var site_pref := ""
 var last_hp := 100.0
 var hurt_t := 0.0
@@ -128,19 +135,44 @@ func think(delta: float) -> void:
 	if arrived and goal_kind in ["plant", "defuse"]:
 		buttons |= Player.BTN_INTERACT
 		move = Vector2.ZERO
-	# stuck detection: hop and repath
+	# stuck detection: replan first, then sidestep, a single jump at most, then abandon the goal
+	if sidestep_t > 0.0:
+		sidestep_t -= delta
+		move = Vector2(sidestep_dir, 0.4)
 	if move != Vector2.ZERO:
 		stuck_t += delta
-		if stuck_t > 1.4:
-			if p.global_position.distance_to(stuck_pos) < 0.4:
-				buttons |= Player.BTN_JUMP
+		if stuck_t > 1.2:
+			if p.global_position.distance_to(stuck_pos) < 0.5:
+				stuck_count += 1
 				path = PackedVector3Array()
 				repath_t = 0.0
+				if stuck_count == 2:
+					sidestep_t = 0.6
+					sidestep_dir = -1.0 if rng.randf() < 0.5 else 1.0
+				elif stuck_count == 3 and not jumped_this_goal:
+					buttons |= Player.BTN_JUMP
+					jumped_this_goal = true
+					Game.log_ev("Bot", "stuck_jump", {"id": p.id, "pos": [snappedf(p.global_position.x, 0.1), snappedf(p.global_position.z, 0.1)]})
+				elif stuck_count >= 4:
+					blocked_goals.append({"pos": goal, "until": Time.get_ticks_msec() / 1000.0 + 12.0})
+					if blocked_goals.size() > 8:
+						blocked_goals.pop_front()
+					Game.log_ev("Bot", "goal_abandoned", {"id": p.id, "goal": [snappedf(goal.x, 0.1), snappedf(goal.y, 0.1), snappedf(goal.z, 0.1)], "kind": goal_kind})
+					goal_kind = ""
+					stuck_count = 0
+					decide_t = 0.0
+			else:
+				stuck_count = 0
 			stuck_t = 0.0
 			stuck_pos = p.global_position
 	else:
 		stuck_t = 0.0
 		stuck_pos = p.global_position
+	if Game.args.has("bot-trace"):
+		trace_t -= delta
+		if trace_t <= 0.0:
+			trace_t = 4.0
+			Game.log_ev("BotTrace", "state", {"id": p.id, "team": p.team, "pos": [snappedf(p.global_position.x, 0.1), snappedf(p.global_position.y, 0.1), snappedf(p.global_position.z, 0.1)], "goal": [snappedf(goal.x, 0.1), snappedf(goal.y, 0.1), snappedf(goal.z, 0.1)], "kind": goal_kind, "target": target.id if target != null else 0, "engaging": engaging, "path": path.size()})
 	if want_ability:
 		buttons |= Player.BTN_ECHO
 		want_ability = false
@@ -223,10 +255,26 @@ func _decide() -> void:
 
 
 func _set_goal(pos: Vector3, kind: String) -> void:
-	if goal_kind != kind or goal.distance_to(pos) > 2.0:
+	# Root-cause fix for the "jumping at the tower" loop: goals are snapped to the closest point of the
+	# navigation mesh, so a target inside a collider (e.g. the old Relic beacon inside the central
+	# obelisk) becomes the nearest reachable spot instead of an unreachable point the bot walks into.
+	var nav_pos := pos
+	var map_rid := p.get_world_3d().navigation_map
+	if NavigationServer3D.map_get_iteration_id(map_rid) > 0:
+		nav_pos = NavigationServer3D.map_get_closest_point(map_rid, pos)
+		if nav_pos == Vector3.ZERO and pos.length() > 1.0:
+			nav_pos = pos
+	var now := Time.get_ticks_msec() / 1000.0
+	for b in blocked_goals:
+		if float(b["until"]) > now and Vector3(b["pos"]).distance_to(nav_pos) < 2.5:
+			return
+	if goal_kind != kind or goal.distance_to(nav_pos) > 2.0:
 		path = PackedVector3Array()
 		repath_t = 0.0
-	goal = pos
+		stuck_count = 0
+		jumped_this_goal = false
+	raw_goal = pos
+	goal = nav_pos
 	goal_kind = kind
 
 
@@ -413,7 +461,12 @@ func _follow(delta: float) -> Dictionary:
 		path = NavigationServer3D.map_get_path(map_rid, p.global_position, goal, true)
 		path_i = 0
 		repath_t = rng.randf_range(0.7, 1.1)
-	var next := goal
+	var next := goal if path.is_empty() else path[path.size() - 1]
+	if not path.is_empty():
+		var end := path[path.size() - 1]
+		if Vector2(end.x, end.z).distance_to(here) < arrive_r and absf(end.y - p.global_position.y) < 2.5 and Vector2(end.x, end.z).distance_to(flat_goal) > arrive_r:
+			# the reachable end of the path is as close as the bot can get: treat it as arrival
+			return {"move": Vector2.ZERO, "yaw": aim_yaw, "arrived": true}
 	while path_i < path.size():
 		var wp := path[path_i]
 		if Vector2(wp.x, wp.z).distance_to(here) < 1.0:

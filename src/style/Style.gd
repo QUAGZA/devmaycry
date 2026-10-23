@@ -11,18 +11,18 @@ const DETAIL := "res://assets/textures/detail/"
 
 ## kind -> [detail texture id or "", roughness, metallic, detail_strength, normal_strength, detail_tile, rim, spec_step, halftone]
 const KINDS := {
-	"stone":    ["sandstone_cracks", 0.92, 0.0, 0.55, 0.8, 0.22, 0.18, 0.0, 0.35],
-	"plaster":  ["painted_plaster_wall", 0.85, 0.0, 0.45, 0.6, 0.3, 0.18, 0.0, 0.35],
-	"ceramic":  ["painted_plaster_wall", 0.45, 0.0, 0.25, 0.35, 0.45, 0.3, 0.35, 0.6],
-	"floor":    ["worn_tile_floor", 0.9, 0.0, 0.5, 0.7, 0.18, 0.0, 0.0, 0.6],
-	"cliff":    ["castle_wall_slates", 0.95, 0.0, 0.6, 1.0, 0.12, 0.1, 0.0, 0.4],
-	"concrete": ["concrete_floor_worn_001", 0.9, 0.0, 0.5, 0.6, 0.2, 0.1, 0.0, 0.35],
-	"metal":    ["metal_plate", 0.42, 0.65, 0.35, 0.5, 0.35, 0.35, 0.6, 0.3],
-	"rust":     ["rusty_metal_02", 0.7, 0.35, 0.6, 0.8, 0.3, 0.2, 0.25, 0.6],
+	"stone":    ["sandstone_cracks", 0.92, 0.0, 0.55, 0.8, 0.22, 0.18, 0.0, 0.0],
+	"plaster":  ["painted_plaster_wall", 0.85, 0.0, 0.45, 0.6, 0.3, 0.18, 0.0, 0.0],
+	"ceramic":  ["painted_plaster_wall", 0.45, 0.0, 0.25, 0.35, 0.45, 0.3, 0.35, 0.0],
+	"floor":    ["worn_tile_floor", 0.9, 0.0, 0.5, 0.7, 0.18, 0.0, 0.0, 0.0],
+	"cliff":    ["castle_wall_slates", 0.95, 0.0, 0.6, 1.0, 0.12, 0.1, 0.0, 0.3],
+	"concrete": ["concrete_floor_worn_001", 0.9, 0.0, 0.5, 0.6, 0.2, 0.1, 0.0, 0.0],
+	"metal":    ["metal_plate", 0.42, 0.65, 0.35, 0.5, 0.35, 0.35, 0.6, 0.0],
+	"rust":     ["rusty_metal_02", 0.7, 0.35, 0.6, 0.8, 0.3, 0.2, 0.25, 0.0],
 	"cloth":    ["", 0.95, 0.0, 0.0, 0.0, 0.5, 0.45, 0.0, 0.0],
 	"gear":     ["", 0.6, 0.2, 0.0, 0.0, 0.5, 0.5, 0.3, 0.0],
 	"skin":     ["", 0.7, 0.0, 0.0, 0.0, 0.5, 0.35, 0.0, 0.0],
-	"foliage":  ["", 0.95, 0.0, 0.0, 0.0, 0.5, 0.15, 0.0, 0.5],
+	"foliage":  ["", 0.95, 0.0, 0.0, 0.0, 0.5, 0.15, 0.0, 0.3],
 }
 
 static var _cache: Dictionary = {}
