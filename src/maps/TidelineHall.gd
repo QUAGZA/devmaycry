@@ -83,7 +83,7 @@ func _build_layout() -> void:
 		MapDecor.solid_column(self, Vector3(x, 0, -28.2), CATWALK_Y - 0.5, 0.3, steel)
 
 	# ---------------------------------------------------------------- objectives and spawns
-	hot_return_layout(Vector3(-52, 0, 0), Vector3(52, 0, 0), Vector3(-72, 0, 12), Vector3(72, 0, 12), Vector3(-20, CHANNEL_Y, 28), Vector3(20, CHANNEL_Y, 28), 10.0)
+	hot_return_layout(Vector3(-52, 0, 0), Vector3(52, 0, 0), Vector3(-72, 0, 12), Vector3(72, 0, 12), Vector3(-20, CHANNEL_Y, 28), Vector3(20, CHANNEL_Y, 28), 10.0, 1.6)
 	core_spawn = Vector3(-52, 0.6, 0)
 	for i in 4:
 		spawn_point("attack", Vector3(-80, 0.5, -6 + i * 4), -90)

@@ -118,7 +118,7 @@ func _build_layout() -> void:
 	box(Vector3(0, BASIN_Y + 0.6, 32.0), Vector3(3.0, 1.2, 1.4), ivory)
 
 	# ---------------------------------------------------------------- objectives and spawns
-	hot_return_layout(Vector3(-55, 0, 0), Vector3(55, 0, 0), Vector3(-66, 0, -22), Vector3(66, 0, -22), Vector3(-30, TERRACE_Y, -27), Vector3(30, TERRACE_Y, -27), 12.0)
+	hot_return_layout(Vector3(-55, 0, 0), Vector3(55, 0, 0), Vector3(-66, 0, -22), Vector3(66, 0, -22), Vector3(-30, TERRACE_Y, -27), Vector3(30, TERRACE_Y, -27), 12.0, 1.6)
 	core_spawn = Vector3(-55, 0.6, 0)
 	for i in 4:
 		spawn_point("attack", Vector3(-82, 0.5, -6 + i * 4), -90)
