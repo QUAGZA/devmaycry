@@ -531,7 +531,7 @@ func _process(delta: float) -> void:
 	_feed_items = keep
 	pause_panel.visible = Game.paused_local and Game.results.is_empty()
 	crosshair.visible = p != null and is_instance_valid(p) and p.alive and not Game.paused_local and Game.results.is_empty()
-	var sb := Input.is_action_pressed("scoreboard") and Game.autopilot == null
+	var sb := (Input.is_action_pressed("scoreboard") and Game.autopilot == null) or Game.args.has("show-scoreboard")
 	if sb != scoreboard_panel.visible:
 		scoreboard_panel.visible = sb
 		if sb:
