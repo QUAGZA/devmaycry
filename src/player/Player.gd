@@ -866,6 +866,9 @@ func _update_life_visuals(delta: float) -> void:
 
 ## First-person weapon motion: mouse sway, walk/run bob, fire kick, reload dip with magazine drop.
 func _animate_viewmodel(delta: float) -> void:
+	var cur_vm: Node3D = viewmodels.get(weapon_id)
+	if cur_vm != null and not cur_vm.visible:
+		_update_viewmodel()
 	var hspeed := Vector3(velocity.x, 0.0, velocity.z).length()
 	var on_ground := is_on_floor() if multiplayer.is_server() else (flags & F_FLOOR) != 0
 	var bob_amt := clampf(hspeed / 8.6, 0.0, 1.0) * (1.0 if on_ground else 0.2) * (0.35 if ads else 1.0)

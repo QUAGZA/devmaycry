@@ -102,6 +102,10 @@ func load_prefs() -> void:
 	window_mode = str(cfg.get_value("video", "window_mode", "fullscreen" if fullscreen else "windowed"))
 	shadow_quality = str(cfg.get_value("video", "shadow_quality", shadow_quality))
 	aa_mode = str(cfg.get_value("video", "aa_mode", aa_mode))
+	# v2 settings: MSAA shows edge-dot artifacts with the PALIMPSEST toon shader on this renderer,
+	# so files written before the fix (no version stamp) fall back to FXAA.
+	if int(cfg.get_value("meta", "version", 1)) < 2 and aa_mode.begins_with("msaa"):
+		aa_mode = "fxaa"
 	texture_quality = str(cfg.get_value("video", "texture_quality", texture_quality))
 	effects_quality = str(cfg.get_value("video", "effects_quality", effects_quality))
 	resolution = Vector2i(int(cfg.get_value("video", "width", resolution.x)), int(cfg.get_value("video", "height", resolution.y)))
@@ -119,7 +123,12 @@ func load_prefs() -> void:
 
 
 func save_prefs() -> void:
+	# automated command-line runs never write the player's real preferences file
+	if cfg_path == PATH and _cli_run():
+		apply_prefs()
+		return
 	var cfg := ConfigFile.new()
+	cfg.set_value("meta", "version", 2)
 	cfg.set_value("input", "mouse_sensitivity", mouse_sensitivity)
 	cfg.set_value("audio", "master", master_volume)
 	cfg.set_value("audio", "sfx", sfx_volume)
@@ -146,6 +155,13 @@ func save_prefs() -> void:
 		cfg.set_value("audio", b.to_lower(), bus_volumes[b])
 	cfg.save(cfg_path)
 	apply_prefs()
+
+
+func _cli_run() -> bool:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--role=") or a.begins_with("--auto=") or a.begins_with("--screenshot"):
+			return true
+	return false
 
 
 func reset_defaults() -> void:
@@ -205,6 +221,7 @@ func apply_graphics() -> void:
 	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA if aa_mode == "fxaa" else Viewport.SCREEN_SPACE_AA_DISABLED
 	vp.use_taa = aa_mode == "taa"
 	vp.scaling_3d_scale = 0.8 if preset == "low" else 1.0
+	Game.log_ev("Settings", "graphics_applied", {"preset": preset, "aa": aa_mode, "msaa": vp.msaa_3d, "ssaa": vp.screen_space_aa, "taa": vp.use_taa, "shadows": shadow_quality, "effects": effects_quality, "textures": texture_quality, "scale": vp.scaling_3d_scale, "cfg": cfg_path})
 	Engine.max_fps = max_fps
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
 	if Game.world != null:
