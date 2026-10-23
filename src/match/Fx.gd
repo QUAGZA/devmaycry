@@ -51,18 +51,24 @@ func _on_fx(kind: String, _id: int, pos: Vector3) -> void:
 	match kind:
 		"dash":
 			_spark(pos + Vector3(0, 0.6, 0), Palette.PORCELAIN, 0.25, 0.5)
+			Sfx.play("dash", -10.0)
 		"teleport":
 			_spark(pos + Vector3(0, 1.0, 0), Palette.MINT, 0.5, 1.2)
+			Sfx.play("warp", -8.0)
 		"echo_hit":
 			_spark(pos + Vector3(0, 1.2, 0), Palette.VERMILION, 0.3, 0.5)
 		"echo_damaged":
 			_spark(pos + Vector3(0, 1.2, 0), Palette.MINT, 0.3, 0.6)
 		"echo_shot":
 			_spark(pos, Palette.VERMILION, 0.15, 0.25)
+		"reload":
+			if _id == Game.local_id():
+				Sfx.play("reload", -6.0)
 		"zip":
 			_spark(pos + Vector3(0, 1.5, 0), Palette.BRASS, 0.4, 0.8)
 		"sling":
 			_spark(pos + Vector3(0, 0.5, 0), Palette.VERMILION, 0.5, 1.4)
+			Sfx.play("warp", -8.0, 0.8)
 
 
 func _on_damage(victim_id: int, _attacker_id: int, _amount: float, _hp_after: float, _cause: String) -> void:

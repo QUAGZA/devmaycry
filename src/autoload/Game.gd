@@ -337,6 +337,11 @@ func _process(delta: float) -> void:
 			_quit_t = -1.0
 			log_ev("Boot", "quit_after", {})
 			get_tree().quit()
+	if args.has("screenshot-title") and not in_match:
+		_shot_elapsed += delta
+		if _shot_elapsed > float(args["screenshot-title"]):
+			args.erase("screenshot-title")
+			_take_screenshot(0.0)
 	if world != null and in_match:
 		_shot_elapsed += delta
 		if not _shots.is_empty() and _shot_elapsed >= _shots[0]:
@@ -415,7 +420,9 @@ func rpc_shot(shooter_id: int, from: Vector3, to: Vector3, hit_id: int) -> void:
 	var p = players.get(shooter_id)
 	if p != null and is_instance_valid(p) and p.is_local():
 		p.kick_view()
-	Sfx.play("shot", -8.0, randf_range(0.94, 1.06))
+		Sfx.play("shot", -6.0, randf_range(0.97, 1.03))
+	else:
+		Sfx.play("shot", -16.0, randf_range(0.9, 1.1))
 
 
 @rpc("authority", "call_local", "reliable")
@@ -426,6 +433,8 @@ func rpc_damage(victim_id: int, attacker_id: int, amount: float, hp_after: float
 		v.hp = hp_after
 	if attacker_id == local_id():
 		Sfx.play("hit", -6.0)
+	elif victim_id == local_id():
+		Sfx.play("elim", -14.0, 1.6)
 
 
 @rpc("authority", "call_local", "unreliable")

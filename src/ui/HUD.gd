@@ -88,6 +88,8 @@ func _build() -> void:
 	# Top left: score card
 	var tl := VBoxContainer.new()
 	tl.position = Vector2(24, 18)
+	tl.custom_minimum_size = Vector2(400, 0)
+	tl.size = Vector2(400, 0)
 	root.add_child(tl)
 	var score_card := PanelContainer.new()
 	score_card.add_theme_stylebox_override("panel", UiTheme.card(Color(Palette.INK, 0.82), Palette.STONE, 1, 2, 10))
@@ -101,6 +103,9 @@ func _build() -> void:
 	role_lbl = UiTheme.label("ATTACK", 30, Palette.VERMILION, disp)
 	sc.add_child(role_lbl)
 	objective_lbl = UiTheme.label("Plant the Core at Site A or B", 16, Palette.PORCELAIN, UiTheme.serif_font())
+	objective_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	objective_lbl.custom_minimum_size = Vector2(380, 0)
+	score_card.custom_minimum_size = Vector2(400, 0)
 	sc.add_child(objective_lbl)
 	site_lbl = UiTheme.stamp("SITE A / OPEN     SITE B / OPEN", Palette.MINT, 13)
 	sc.add_child(site_lbl)
@@ -310,6 +315,8 @@ func _build_scoreboard() -> void:
 
 # ---------------------------------------------------------------- events
 func _on_notice(text: String, seconds: float) -> void:
+	if seconds >= 3.0:
+		Sfx.play("sting", -8.0)
 	var parts := text.split("\n", true, 1)
 	notice_lbl.text = parts[0]
 	sub_notice_lbl.text = parts[1] if parts.size() > 1 else ""
