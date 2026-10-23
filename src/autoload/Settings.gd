@@ -190,6 +190,7 @@ func apply_graphics() -> void:
 		if we != null and we is WorldEnvironment:
 			we.environment.glow_enabled = preset != "low"
 			we.environment.fog_enabled = preset != "low"
+			we.environment.ssao_enabled = preset != "low"
 
 
 func glow_allowed() -> bool:

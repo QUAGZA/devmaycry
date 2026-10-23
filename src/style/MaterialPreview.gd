@@ -32,7 +32,7 @@ func _ready() -> void:
 	var cam := Camera3D.new()
 	cam.fov = 50
 	add_child(cam)
-	cam.look_at_from_position(Vector3(0, 3.6, 9.5), Vector3(0, 1.0, 0), Vector3.UP)
+	cam.look_at_from_position(Vector3(1.0, 2.6, -7.5), Vector3(1.0, 1.0, 0.5), Vector3.UP)
 	cam.current = true
 	Style.add_outline(cam)
 	var floor_mi := MeshInstance3D.new()
@@ -65,7 +65,8 @@ func _ready() -> void:
 		l.font_size = 36
 		l.pixel_size = 0.004
 		l.position = Vector3(x, 0.05, -0.4)
-		l.rotation_degrees.x = -90
+		l.rotation_degrees = Vector3(-90, 180, 0)
+		l.position.z = -2.0
 		l.modulate = Palette.INK
 		add_child(l)
 	# temporal energy: emissive mint and signal orange
@@ -90,12 +91,14 @@ func _ready() -> void:
 	rig2.position = Vector3(1.4, 0, 1.6)
 	rig2.rotation_degrees.y = -30
 	rig2.set_meta("pose", "run")
+	rig.set_weapon("rifle")
+	rig2.set_weapon("mg")
 	for i in 4:
 		var w := WeaponModels.build(["rifle", "shotgun", "sniper", "mg"][i])
 		if w != null:
 			add_child(w)
 			w.position = Vector3(4.0 + i * 1.0, 0.25, 2.0)
-			w.rotation_degrees = Vector3(0, -70, 0)
+			w.rotation_degrees = Vector3(0, 110, 0)
 			w.scale = Vector3.ONE * 1.6
 
 

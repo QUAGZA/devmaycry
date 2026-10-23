@@ -65,6 +65,7 @@ func bake_nav() -> void:
 	nm.geometry_source_group_name = "navgeo"
 	nav.navigation_mesh = nm
 	nav.bake_navigation_mesh(false)
+	Game.log_ev("Nav", "baked", {"map": id, "polygons": nm.get_polygon_count(), "vertices": nm.get_vertices().size()})
 
 
 # ---------------------------------------------------------------- helpers
@@ -230,7 +231,7 @@ func light_env(sun_dir: Vector3, sun_color: Color, sky_top: Color, sky_horizon: 
 	env.ambient_light_sky_contribution = 0.45
 	env.ambient_light_energy = 0.55
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 0.78
+	env.tonemap_exposure = 0.72
 	env.glow_enabled = true
 	env.glow_intensity = 0.35
 	env.glow_bloom = 0.05
@@ -239,6 +240,18 @@ func light_env(sun_dir: Vector3, sun_color: Color, sky_top: Color, sky_horizon: 
 	env.fog_light_color = fog_color
 	env.fog_density = fog_density
 	env.fog_sky_affect = 0.1
+	# PALIMPSEST grade: slightly lifted contrast and saturation, cool shadows via ambient tint
+	env.adjustment_enabled = true
+	env.adjustment_contrast = 1.1
+	env.adjustment_saturation = 1.12
+	env.ambient_light_color = Color("8C98B8")
+	env.ambient_light_sky_contribution = 0.6
+	env.ssao_enabled = true
+	env.ssao_radius = 1.4
+	env.ssao_intensity = 1.6
+	env.ssao_power = 1.4
+	skm.sky_curve = 0.12
+	skm.sun_curve = 0.05
 	we.environment = env
 	root.add_child(we)
 

@@ -41,13 +41,13 @@ static func build(id: String) -> Node3D:
 	pivot.name = "Pivot"
 	root.add_child(pivot)
 	pivot.add_child(body)
-	Style.restyle(body, "metal", Color(0.62, 0.64, 0.68))
+	Style.restyle(body, "metal", Color(0.78, 0.78, 0.8), 0.12)
 	for att in d[3]:
 		var a := Style.model(DIR + str(att[0]))
 		if a != null:
 			a.position = att[1]
 			a.scale = Vector3.ONE * float(att[2])
-			Style.restyle(a, "gear", Color(0.45, 0.47, 0.5))
+			Style.restyle(a, "gear", Color(0.6, 0.6, 0.62), 0.1)
 			pivot.add_child(a)
 			if str(att[0]).begins_with("clip"):
 				a.name = "Mag"
@@ -62,13 +62,13 @@ static func build(id: String) -> Node3D:
 	stripe.material_override = Style.surface("ceramic", d[2])
 	stripe.position = Vector3(bb.get_center().x, bb.position.y + bb.size.y * 0.62, bb.get_center().z)
 	pivot.add_child(stripe)
-	# Kenney blasters point their barrel toward -Z with the grip near the origin; recentre on X and
-	# put the rear of the body a fixed distance behind the grip so all four share one hand position.
-	pivot.position = Vector3(-bb.get_center().x, 0.0, 0.0)
+		# Kenney blasters model their barrel toward +Z; turn them so the barrel points down -Z (camera forward)
+	pivot.rotation.y = PI
+	pivot.position = Vector3(bb.get_center().x * float(d[1]), 0.0, 0.0)
 	pivot.scale = Vector3.ONE * float(d[1])
 	var muzzle := Marker3D.new()
 	muzzle.name = "Muzzle"
-	muzzle.position = Vector3(0, (bb.position.y + bb.size.y * 0.7) * float(d[1]), bb.position.z * float(d[1]) - 0.02)
+	muzzle.position = Vector3(0, (bb.position.y + bb.size.y * 0.7) * float(d[1]), -bb.end.z * float(d[1]) - 0.02)
 	root.add_child(muzzle)
 	root.set_meta("length", bb.size.z * float(d[1]))
 	return root

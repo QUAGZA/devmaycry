@@ -13,6 +13,7 @@ uniform float depth_threshold : hint_range(0.001, 0.5) = 0.06;
 uniform float normal_threshold : hint_range(0.05, 1.0) = 0.4;
 uniform float max_distance = 85.0;
 uniform float strength : hint_range(0.0, 1.0) = 0.8;
+uniform float normal_weight : hint_range(0.0, 1.0) = 0.0;
 
 void vertex() {
 	POSITION = vec4(VERTEX.xy, 1.0, 1.0);
@@ -48,7 +49,7 @@ void fragment() {
 	nd = max(nd, 1.0 - dot(nc, vnormal(uv - vec2(0.0, px.y))));
 	nd = max(nd, 1.0 - dot(nc, vnormal(uv + vec2(0.0, px.y))));
 	float e_norm = smoothstep(normal_threshold, normal_threshold + 0.2, nd) * (1.0 - smoothstep(30.0, max_distance * 0.8, dmin));
-	float edge = max(e_depth, e_norm);
+	float edge = max(e_depth, e_norm * normal_weight);
 	float fade = 1.0 - smoothstep(max_distance * 0.6, max_distance, dmin);
 	if (dmin > 3000.0) {
 		edge = 0.0;

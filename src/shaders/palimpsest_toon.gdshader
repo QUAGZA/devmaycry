@@ -10,6 +10,7 @@ uniform vec4 albedo : source_color = vec4(0.9, 0.86, 0.78, 1.0);
 uniform vec4 accent : source_color = vec4(0.78, 0.72, 0.62, 1.0);
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_enable, hint_default_white;
 uniform float use_albedo_tex : hint_range(0.0, 1.0) = 0.0;
+uniform float tex_saturation : hint_range(0.0, 1.0) = 1.0;
 uniform vec4 shade_tint : source_color = vec4(0.30, 0.34, 0.52, 1.0);
 uniform float shade_strength : hint_range(0.0, 1.0) = 0.35;
 
@@ -70,7 +71,9 @@ void fragment() {
 	float n2 = vnoise(wpos * tile * 4.3 + 17.0);
 	vec3 base = albedo.rgb;
 	if (use_albedo_tex > 0.5) {
-		base *= texture(albedo_tex, UV).rgb;
+		vec3 tc = texture(albedo_tex, UV).rgb;
+		tc = mix(vec3(dot(tc, vec3(0.299, 0.587, 0.114))), tc, tex_saturation);
+		base *= tc;
 	}
 	vec3 acc = use_albedo_tex > 0.5 ? base * 0.86 : accent.rgb;
 	vec3 col = mix(base, acc, clamp(n * 0.7 + n2 * 0.25 - 0.1, 0.0, 1.0) * noise_intensity * 1.6);

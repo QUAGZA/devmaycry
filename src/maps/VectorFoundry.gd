@@ -23,7 +23,7 @@ func _build_layout() -> void:
 	var cobalt_glow := mat(Palette.COBALT, 0.5, 0.0, Palette.COBALT, 2.0)
 	light_env(Vector3(-0.2, -0.85, -0.45), Color("FFE2C4"), Color("C8B9AD"), Color("E9D9C6"), Color("4A3A33"), Color("D7C4B2"), 0.002)
 
-	box(Vector3(0, -0.5, 0), Vector3(150, 1, 100), bone, "Floor")
+	box(Vector3(0, -0.5, 0), Vector3(150, 1, 100), Style.surface("concrete", Color("A39079")), "Floor")
 	for z in [-50.5, 50.5]:
 		box(Vector3(0, 4.0, z), Vector3(152, 8, 1), terracotta, "", false)
 	for x in [-75.5, 75.5]:
@@ -33,7 +33,7 @@ func _build_layout() -> void:
 	for r in [12.0, 24.0, 36.0]:
 		ring(Vector3(0, 0.03, 0), r, 0.18, marking)
 	for i in range(-6, 7):
-		decal(Vector3(i * 11.0, 0.02, 0), Vector2(0.25, 100), marking)
+		decal(Vector3(i * 11.0, 0.02, 0), Vector2(0.18, 100), marking)
 
 	# Spawn bays
 	for i in 4:
@@ -131,3 +131,59 @@ func _build_layout() -> void:
 	ffa_spawn(Vector3(30, 1, 0), -90)
 	shard_points = [Vector3(0, ring_y + 0.6, 0), Vector3(0, 3.6, 32), Vector3(0, 3.6, -32), Vector3(-40, 1, 40), Vector3(40, 1, -40), Vector3(38, 1.8, 26), Vector3(-36, 1, -40)]
 	beacon_points = [Vector3(0, ring_y, 0), Vector3(0, 3.0, 32), Vector3(38, 0, -26), Vector3(-36, 0, 0)]
+	_art_pass()
+
+
+## Visual production pass: reactor machinery, gantries, kiln stacks, angled bastions and haze.
+## Collision is only added for the corner bastions, outside routes, spawns and sling landings.
+func _art_pass() -> void:
+	var steel := Style.surface("metal", Color("4A505A"))
+	var terracotta := Style.surface("plaster", Color("B5643C"))
+	var cobalt := Style.surface("plaster", Color("34436E"))
+	var orange_e := Style.surface("ceramic", Color("E2683A"), Color("E2683A"), 1.8)
+	var deco := features
+	# reactor: rotating rings around the central spindle, ribbed housing
+	for k in 3:
+		var r := MeshInstance3D.new()
+		var tm := TorusMesh.new()
+		tm.inner_radius = 3.2 + k * 1.4
+		tm.outer_radius = 3.6 + k * 1.4
+		tm.rings = 48
+		r.mesh = tm
+		r.material_override = orange_e if k == 1 else steel
+		r.position = Vector3(0, 12.0 + k * 1.6, 0)
+		r.rotation_degrees = Vector3(18.0 * (k - 1), k * 40.0, 10.0 * k)
+		var sp := MapDecor.Spinner.new()
+		sp.speed = 0.15 + k * 0.08
+		sp.position = r.position
+		r.position = Vector3.ZERO
+		sp.add_child(r)
+		deco.add_child(sp)
+	for a in 12:
+		var ang := deg_to_rad(a * 30.0)
+		MapDecor.strut(deco, Vector3(cos(ang) * 1.5, 4.0, sin(ang) * 1.5), Vector3(cos(ang) * 1.5, 16.0, sin(ang) * 1.5), 0.16, steel)
+	# gantries over the side courts and kiln stacks on the horizon
+	for zs in [-1.0, 1.0]:
+		MapDecor.strut(deco, Vector3(-60, 11.0, zs * 46.0), Vector3(60, 11.0, zs * 46.0), 0.5, steel)
+		for x in [-60.0, -20.0, 20.0, 60.0]:
+			MapDecor.strut(deco, Vector3(x, 0.0, zs * 50.6), Vector3(x, 11.0, zs * 46.0), 0.35, steel)
+	for i in 8:
+		var t := float(i) / 8.0 * TAU + 0.3
+		var p := Vector3(cos(t) * 120.0, 0, sin(t) * 85.0)
+		var cm := CylinderMesh.new()
+		cm.top_radius = 3.5
+		cm.bottom_radius = 5.5
+		cm.height = 30.0 + (i % 3) * 10.0
+		MapDecor._mesh(deco, cm, p + Vector3(0, cm.height * 0.5 - 2.0, 0), terracotta if i % 2 == 0 else cobalt)
+		MapDecor._mesh(deco, MapDecor._boxm(Vector3(8.0, 1.0, 8.0)), p + Vector3(0, cm.height - 2.0, 0), orange_e)
+	var ground := MeshInstance3D.new()
+	var gp := PlaneMesh.new()
+	gp.size = Vector2(420, 320)
+	ground.mesh = gp
+	ground.position = Vector3(0, -1.0, 0)
+	ground.material_override = Style.surface("concrete", Color("6A5A50"))
+	deco.add_child(ground)
+	for c in [[Vector3(75, 0, 50), 56.0], [Vector3(75, 0, -50), -56.0], [Vector3(-75, 0, 50), -56.0], [Vector3(-75, 0, -50), 56.0]]:
+		var cp: Vector3 = c[0]
+		MapDecor.bastion(self, cp, c[1], 36.0, 16.0, 8.0, terracotta)
+	MapDecor.dress_boxes(self)

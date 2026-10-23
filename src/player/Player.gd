@@ -123,7 +123,13 @@ var shape: CollisionShape3D
 var viewmodel: Node3D
 var tag: Label3D
 var vm_mat: StandardMaterial3D
-var rig: HumanoidRig
+var rig: TacticalRig
+var _was_alive := true
+var _death_vis_t := 0.0
+var _was_reloading := false
+var _sway := Vector2.ZERO
+var _bob_t := 0.0
+var _vm_base := Vector3(0.21, -0.19, -0.4)
 
 
 func _init() -> void:
@@ -148,7 +154,7 @@ func _init() -> void:
 	body_mesh.material_override = body_mat
 	body_mesh.visible = false
 	add_child(body_mesh)
-	rig = HumanoidRig.new()
+	rig = TacticalRig.new()
 	rig.name = "Rig"
 	add_child(rig)
 	var visor := MeshInstance3D.new()
@@ -175,8 +181,8 @@ func _init() -> void:
 	head.add_child(cam)
 	viewmodel = Node3D.new()
 	viewmodel.name = "Viewmodel"
-	viewmodel.position = Vector3(0.27, -0.23, -0.5)
-	viewmodel.scale = Vector3(0.58, 0.58, 0.58)
+	viewmodel.position = _vm_base
+	viewmodel.scale = Vector3.ONE
 	viewmodel.visible = false
 	cam.add_child(viewmodel)
 	_build_viewmodel()
@@ -219,53 +225,55 @@ func _vm_cyl(parent: Node3D, radius: float, height: float, pos: Vector3, mat: Ma
 ## Four original first-person weapon models built from parts (ink body, porcelain grips, brass/mint accents).
 func _build_viewmodel() -> void:
 	vm_mat = StandardMaterial3D.new()
-	vm_mat.albedo_color = Palette.INK
-	vm_mat.roughness = 0.35
-	vm_mat.metallic = 0.5
-	var porcelain := StandardMaterial3D.new()
-	porcelain.albedo_color = Palette.PORCELAIN
-	porcelain.roughness = 0.5
-	var brass := StandardMaterial3D.new()
-	brass.albedo_color = Palette.BRASS
-	brass.metallic = 0.8
-	brass.roughness = 0.3
+	var sleeve := Style.surface("cloth", Color("3A4150"))
+	var cuff := Style.surface("gear", Color("2B2E2B"))
+	var glove := Style.surface("gear", Color("50473C"))
 	for wid in Weapons.ORDER:
 		var root := Node3D.new()
 		root.name = wid
-		var col := Color(str(Weapons.get_data(wid)["color"]))
-		var glow := StandardMaterial3D.new()
-		glow.albedo_color = col
-		glow.emission_enabled = true
-		glow.emission = col
-		glow.emission_energy_multiplier = 2.0
-		match wid:
-			"rifle":
-				_vm_box(root, Vector3(0.06, 0.08, 0.42), Vector3(0, 0, -0.02), vm_mat)
-				_vm_box(root, Vector3(0.05, 0.12, 0.06), Vector3(0, -0.09, 0.1), porcelain)
-				_vm_box(root, Vector3(0.04, 0.14, 0.05), Vector3(0, -0.1, -0.06), vm_mat)
-				_vm_cyl(root, 0.014, 0.2, Vector3(0, 0.02, -0.3), brass)
-				_vm_box(root, Vector3(0.02, 0.02, 0.05), Vector3(0, 0.06, -0.12), glow)
-			"shotgun":
-				_vm_cyl(root, 0.03, 0.46, Vector3(0, 0.0, -0.08), vm_mat)
-				_vm_cyl(root, 0.022, 0.3, Vector3(0, -0.045, -0.12), porcelain)
-				_vm_box(root, Vector3(0.07, 0.11, 0.1), Vector3(0, -0.07, 0.14), porcelain)
-				_vm_box(root, Vector3(0.05, 0.05, 0.1), Vector3(0, -0.04, -0.18), brass)
-				_vm_box(root, Vector3(0.02, 0.02, 0.03), Vector3(0, 0.04, -0.3), glow)
-			"sniper":
-				_vm_box(root, Vector3(0.05, 0.07, 0.6), Vector3(0, 0, -0.1), vm_mat)
-				_vm_cyl(root, 0.012, 0.36, Vector3(0, 0.0, -0.5), brass)
-				_vm_cyl(root, 0.035, 0.18, Vector3(0, 0.085, -0.08), vm_mat)
-				_vm_cyl(root, 0.03, 0.01, Vector3(0, 0.085, -0.17), glow)
-				_vm_box(root, Vector3(0.05, 0.12, 0.06), Vector3(0, -0.09, 0.12), porcelain)
-			"mg":
-				_vm_box(root, Vector3(0.09, 0.11, 0.46), Vector3(0, 0, -0.02), vm_mat)
-				_vm_box(root, Vector3(0.1, 0.09, 0.14), Vector3(-0.07, -0.03, 0.02), porcelain)
-				_vm_cyl(root, 0.02, 0.22, Vector3(0, 0.02, -0.34), brass)
-				_vm_box(root, Vector3(0.05, 0.13, 0.06), Vector3(0, -0.1, 0.12), porcelain)
-				_vm_box(root, Vector3(0.025, 0.025, 0.08), Vector3(0.04, 0.06, -0.1), glow)
+		var w := WeaponModels.build(wid)
+		if w == null:
+			continue
+		w.scale = Vector3.ONE * 0.42
+		root.add_child(w)
+		var length: float = float(w.get_meta("length", 0.8)) * 0.42
+		# right hand on the grip, forearm running back and down out of frame
+		var grip := Vector3(0.0, -0.075, 0.06)
+		_limb(root, grip + Vector3(0.0, -0.01, 0.02), grip + Vector3(0.12, -0.2, 0.42), 0.042, sleeve)
+		_limb(root, grip + Vector3(0.0, -0.005, 0.02), grip + Vector3(0.02, -0.03, 0.1), 0.046, cuff)
+		_hand(root, grip, glove)
+		# support hand on the fore-end, forearm crossing in from the lower left
+		var fore := Vector3(0.0, -0.05, -length * 0.38)
+		_limb(root, fore + Vector3(-0.01, -0.02, 0.03), fore + Vector3(-0.24, -0.26, 0.4), 0.04, sleeve)
+		_hand(root, fore, glove)
 		root.visible = wid == weapon_id
 		viewmodel.add_child(root)
 		viewmodels[wid] = root
+
+
+## Cylinder limb between two points in viewmodel space.
+func _limb(parent: Node3D, a: Vector3, b: Vector3, radius: float, mat: Material) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var cm := CapsuleMesh.new()
+	cm.radius = radius
+	cm.height = a.distance_to(b) + radius * 2.0
+	mi.mesh = cm
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+	mi.position = (a + b) * 0.5
+	var dir := (b - a).normalized()
+	var up := Vector3.UP if absf(dir.dot(Vector3.UP)) < 0.95 else Vector3.RIGHT
+	mi.basis = Basis.looking_at(dir, up) * Basis(Vector3.RIGHT, PI * 0.5)
+	return mi
+
+
+## Gloved hand wrapped around a grip: palm block, finger wrap and thumb.
+func _hand(parent: Node3D, at: Vector3, mat: Material) -> void:
+	var palm := _vm_box(parent, Vector3(0.05, 0.075, 0.07), at + Vector3(0.028, 0.0, 0.0), mat)
+	palm.rotation_degrees.z = -8
+	_vm_box(parent, Vector3(0.062, 0.05, 0.032), at + Vector3(-0.004, -0.012, -0.034), mat)
+	_vm_box(parent, Vector3(0.02, 0.02, 0.06), at + Vector3(-0.028, 0.022, -0.012), mat)
 
 
 func _reset_ammo() -> void:
@@ -799,7 +807,7 @@ func apply_state(s: Array) -> void:
 
 func _apply_flags_visual() -> void:
 	body_mesh.visible = false
-	rig.visible = alive and not _local and not _spectated
+	rig.visible = (alive or _death_vis_t > 0.0) and not _local and not _spectated
 	tag.visible = alive and not _local and not _spectated
 	shape.disabled = not alive
 
@@ -811,9 +819,9 @@ func _process(delta: float) -> void:
 		var local_ads := ads if multiplayer.is_server() else (Input.is_action_pressed("ads") and Game.autopilot == null and not Game.paused_local)
 		_fov_target = float(Weapons.get_data(weapon_id)["ads_fov"]) if local_ads and alive else Settings.fov
 		cam.fov = lerpf(cam.fov, _fov_target, minf(1.0, 12.0 * delta))
+	_update_life_visuals(delta)
 	if viewmodel.visible:
-		viewmodel.position = Vector3(0.27, -0.23 - _view_kick * 0.02, -0.5 + _view_kick * 0.06)
-		viewmodel.rotation.x = _view_kick * 0.12
+		_animate_viewmodel(delta)
 	if multiplayer.is_server():
 		if _local:
 			rotation.y = yaw
@@ -828,6 +836,72 @@ func _process(delta: float) -> void:
 		rotation.y = lerp_angle(rotation.y, _net_yaw, 0.35)
 		head.rotation.x = lerpf(head.rotation.x, _net_pitch, 0.35)
 	head.position.y = lerpf(head.position.y, CROUCH_HEIGHT if crouching else STAND_HEIGHT, 12.0 * delta)
+
+
+## Death clip, revive, reload and weapon visuals for the third-person rig (server and clients alike).
+func _update_life_visuals(delta: float) -> void:
+	if alive != _was_alive:
+		_was_alive = alive
+		if not alive:
+			rig.die()
+			_death_vis_t = 1.8
+		else:
+			rig.revive()
+			_death_vis_t = 0.0
+		_apply_flags_visual()
+	if _death_vis_t > 0.0:
+		_death_vis_t -= delta
+		if _death_vis_t <= 0.0:
+			_apply_flags_visual()
+	var reloading := reload_t > 0.0
+	if reloading and not _was_reloading:
+		rig.reload()
+	_was_reloading = reloading
+	rig.set_weapon(weapon_id)
+
+
+## First-person weapon motion: mouse sway, walk/run bob, fire kick, reload dip with magazine drop.
+func _animate_viewmodel(delta: float) -> void:
+	var hspeed := Vector3(velocity.x, 0.0, velocity.z).length()
+	var on_ground := is_on_floor() if multiplayer.is_server() else (flags & F_FLOOR) != 0
+	var bob_amt := clampf(hspeed / 8.6, 0.0, 1.0) * (1.0 if on_ground else 0.2) * (0.35 if ads else 1.0)
+	_bob_t += delta * (6.0 + hspeed * 0.9)
+	var bob := Vector3(sin(_bob_t) * 0.012, -absf(cos(_bob_t)) * 0.014, 0.0) * bob_amt * (1.0 if Settings.head_bob else 0.35)
+	var look := Vector2(yaw, pitch)
+	var dl := look - _sway
+	dl.x = wrapf(dl.x, -PI, PI)
+	_sway = _sway.lerp(look, minf(1.0, delta * 10.0))
+	var sway := Vector3(clampf(-dl.x * 0.25, -0.04, 0.04), clampf(dl.y * 0.25, -0.03, 0.03), 0.0)
+	var idle := Vector3(0.0, sin(Time.get_ticks_msec() * 0.0015) * 0.003, 0.0)
+	var base := Vector3(0.0, -0.13, -0.3) if ads else _vm_base
+	var rl := 0.0
+	var rtime := float(Weapons.get_data(weapon_id)["reload"])
+	if reload_t > 0.0 and rtime > 0.0:
+		var f := 1.0 - reload_t / rtime
+		rl = sin(clampf(f, 0.0, 1.0) * PI)
+	var target := base + bob + sway + idle + Vector3(0, -_view_kick * 0.02 - rl * 0.08, _view_kick * 0.05)
+	viewmodel.position = viewmodel.position.lerp(target, minf(1.0, delta * 18.0))
+	viewmodel.rotation = Vector3(_view_kick * 0.1 + rl * 0.35, sway.x * 2.0, rl * 0.5 + sway.x * 1.5)
+	var cur: Node3D = viewmodels.get(weapon_id)
+	if cur != null:
+		var mag := cur.find_child("Mag", true, false) as Node3D
+		if mag != null:
+			if not mag.has_meta("rest"):
+				mag.set_meta("rest", mag.position)
+			mag.position = (mag.get_meta("rest") as Vector3) + Vector3(0, -0.25 * rl, 0)
+	if switch_t > 0.0:
+		viewmodel.position.y -= switch_t * 0.4
+
+
+## World-space muzzle position for flashes: the real barrel tip for the local viewmodel.
+func muzzle_position() -> Vector3:
+	if _local and viewmodel.visible:
+		var cur: Node3D = viewmodels.get(weapon_id)
+		if cur != null:
+			var m := cur.find_child("Muzzle", true, false) as Node3D
+			if m != null:
+				return m.global_position
+	return eye_position() + aim_dir() * 0.8
 
 
 func _animate_rig(delta: float) -> void:

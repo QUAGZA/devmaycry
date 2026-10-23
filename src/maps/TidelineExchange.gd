@@ -19,22 +19,24 @@ func _build_layout() -> void:
 	var brass := mat(Palette.BRASS, 0.35, 0.8)
 	var indigo := mat(Palette.INDIGO, 0.9)
 	var canvas := mat(Color("3C4C86"), 0.95)
-	var water := mat(Color("3F6F86"), 0.15, 0.1)
+	var water := StandardMaterial3D.new()
+	water.albedo_color = Color("2F5A78")
+	water.roughness = 0.05
+	water.metallic = 0.45
+	water.rim_enabled = true
 	var ink := mat(Palette.INK, 0.6, 0.3)
 	var vermilion_glow := mat(Palette.VERMILION, 0.5, 0.0, Palette.VERMILION, 2.5)
 	var cobalt_glow := mat(Palette.COBALT, 0.5, 0.0, Palette.COBALT, 2.0)
 	light_env(Vector3(0.35, -0.7, -0.5), Color("FFF4E4"), Color("8FA9C4"), Color("DCE3E6"), Color("4E5660"), Color("C9D3D8"), 0.0022)
 
 	# Main deck 120 x 90 with water channels carved as decals
-	box(Vector3(0, -0.5, 0), Vector3(150, 1, 90), stone, "Deck")
+	box(Vector3(0, -0.5, 0), Vector3(150, 1, 90), Style.surface("concrete", Color("8F8A80")), "Deck")
 	for z in [-45.5, 45.5]:
 		box(Vector3(0, 3.0, z), Vector3(152, 6, 1), indigo, "", false)
 	for x in [-75.5, 75.5]:
 		box(Vector3(x, 3.0, 0), Vector3(1, 6, 92), indigo, "", false)
 	for z in [-18.0, 0.0, 18.0]:
 		decal(Vector3(0, 0.02, z), Vector2(140, 2.2), water)
-	for i in range(-6, 7):
-		decal(Vector3(i * 11.0, 0.025, 0), Vector2(0.3, 90), mat(Color("9A9283"), 1.0))
 
 	# Spawn quays
 	for i in 4:
@@ -127,6 +129,40 @@ func _build_layout() -> void:
 	ffa_spawn(Vector3(28, 1, 0), -90)
 	shard_points = [Vector3(-36, high_y + 0.5, 30), Vector3(36, high_y + 0.5, 30), Vector3(0, 3.5, 0), Vector3(-40, 1, -36), Vector3(40, 1, -36), Vector3(0, high_y + 0.5, 32), Vector3(0, 1, -20)]
 	beacon_points = [Vector3(0, 3.0, 0), Vector3(0, high_y, 32), Vector3(38, 0.3, -24), Vector3(-36, 0, -30)]
+	_art_pass()
+
+
+## Visual production pass: sea, piles, crane landmark, seawall bastions, catwalk rails and pipes.
+## Collision is only added for the corner bastions, which sit outside every route, spawn and zipline.
+func _art_pass() -> void:
+	var steel := Style.surface("rust", Color("6E5A4A"))
+	var paint := Style.surface("ceramic", Color("C8622F"))
+	var brass_m := Style.surface("metal", Palette.BRASS)
+	var seawall := Style.surface("concrete", Color("8E8A80"))
+	var deco := features
+	MapDecor.sea(self, -9.0, Vector2(520, 380))
+	for zs in [-1.0, 1.0]:
+		MapDecor.piles(deco, Vector3(-72, -1.0, zs * 46.5), Vector3(72, -1.0, zs * 46.5), 13, 10.0, steel)
+	for xs in [-1.0, 1.0]:
+		MapDecor.piles(deco, Vector3(xs * 76.5, -1.0, -40), Vector3(xs * 76.5, -1.0, 40), 7, 10.0, steel)
+	# crane rising through the exchange tower: the landmark visible from every deck
+	MapDecor.crane(deco, Vector3(0, 3.0, 0), 20.0, 30.0, 35.0, steel, paint)
+	# broken seawall bastions across the four corners
+	for c in [[Vector3(75, 0, 45), 59.0], [Vector3(75, 0, -45), -59.0], [Vector3(-75, 0, 45), -59.0], [Vector3(-75, 0, -45), 59.0]]:
+		var cp: Vector3 = c[0]
+		MapDecor.bastion(self, cp, c[1], 34.0, 14.0, 7.0, seawall)
+	# distant cranes and a second dock on the horizon
+	MapDecor.crane(deco, Vector3(-120, -9.0, 70), 34.0, 40.0, -20.0, steel, paint)
+	MapDecor.crane(deco, Vector3(130, -9.0, -60), 30.0, 36.0, 160.0, steel, paint)
+	for i in 6:
+		MapDecor._mesh(deco, MapDecor._boxm(Vector3(26, 6 + i % 3 * 3.0, 14)), Vector3(-150 + i * 60, -6.0, 120 + (i % 2) * 15.0), seawall)
+	# catwalk rails along the high route edges and pipes along the inner walls
+	for x in [-36.0, 0.0, 36.0]:
+		MapDecor.strut(deco, Vector3(x - 7.0, 7.1, 24.6), Vector3(x + 7.0, 7.1, 24.6), 0.04, brass_m)
+	for zs in [-1.0, 1.0]:
+		MapDecor.strut(deco, Vector3(-70, 4.6, zs * 44.6), Vector3(70, 4.6, zs * 44.6), 0.22, steel)
+		MapDecor.strut(deco, Vector3(-70, 5.2, zs * 44.6), Vector3(70, 5.2, zs * 44.6), 0.14, paint)
+	MapDecor.dress_boxes(self)
 
 
 func site_platform(site_id: String, center: Vector3, glow: Material, radius: float) -> void:

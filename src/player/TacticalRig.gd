@@ -72,7 +72,7 @@ func build(color: Color, glyph_text: String) -> void:
 	skel = model.find_child("Skeleton3D", true, false) as Skeleton3D
 	# suit: dark cloth through the toon shader, keeping the original texture as albedo
 	for mi: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
-		Style.restyle(mi, "cloth", Color(0.85, 0.88, 0.95))
+		Style.restyle(mi, "cloth", Color(0.42, 0.45, 0.5))
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		_meshes.append(mi)
 	_dress()
@@ -162,6 +162,8 @@ func _setup_anim() -> void:
 	tree.root_node = NodePath("..")
 	var bt := AnimationNodeBlendTree.new()
 	var loco := AnimationNodeBlendSpace1D.new()
+	loco.min_space = 0.0
+	loco.max_space = 9.0
 	for pt in [["Idle", 0.0], ["Walk", 2.5], ["Jog_Fwd", 5.5], ["Sprint", 8.5]]:
 		var a := AnimationNodeAnimation.new()
 		a.animation = pt[0]
@@ -170,6 +172,8 @@ func _setup_anim() -> void:
 	loco.max_space = 9.0
 	bt.add_node("loco", loco)
 	var crouch := AnimationNodeBlendSpace1D.new()
+	crouch.min_space = 0.0
+	crouch.max_space = 4.0
 	for pt in [["Crouch_Idle", 0.0], ["Crouch_Fwd", 3.0]]:
 		var a := AnimationNodeAnimation.new()
 		a.animation = pt[0]

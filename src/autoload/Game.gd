@@ -319,7 +319,7 @@ func _physics_process(delta: float) -> void:
 				_spawn_all()
 	if not in_match or world == null:
 		return
-	if args.has("routeprobe") and not _probed and server_tick > 5 and map_def != null and mode_id == "hot_return":
+	if args.has("routeprobe") and not _probed and server_tick > 60 and map_def != null and mode_id == "hot_return":
 		_probed = true
 		var map_rid: RID = world.get_world_3d().navigation_map
 		var vault: Vector3 = map_def.vaults.get(2, Vector3.ZERO)
@@ -586,7 +586,9 @@ func rpc_muzzle(shooter_id: int, weapon: String) -> void:
 		else:
 			var d: float = local_player.global_position.distance_to(p.global_position) if local_player != null and is_instance_valid(local_player) else 30.0
 			Sfx.play(cue, -10.0 - clampf(d / 6.0, 0.0, 18.0), randf_range(0.95, 1.05))
-		fx.emit("muzzle", shooter_id, p.eye_position() + p.aim_dir() * 0.8)
+		fx.emit("muzzle", shooter_id, p.muzzle_position())
+		if not p.is_local() and p.rig != null:
+			p.rig.fire()
 
 
 @rpc("authority", "call_local", "reliable")

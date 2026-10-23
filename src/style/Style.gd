@@ -11,12 +11,12 @@ const DETAIL := "res://assets/textures/detail/"
 
 ## kind -> [detail texture id or "", roughness, metallic, detail_strength, normal_strength, detail_tile, rim, spec_step, halftone]
 const KINDS := {
-	"stone":    ["sandstone_cracks", 0.92, 0.0, 0.55, 0.8, 0.22, 0.18, 0.0, 1.0],
-	"plaster":  ["painted_plaster_wall", 0.85, 0.0, 0.45, 0.6, 0.3, 0.18, 0.0, 1.0],
+	"stone":    ["sandstone_cracks", 0.92, 0.0, 0.55, 0.8, 0.22, 0.18, 0.0, 0.35],
+	"plaster":  ["painted_plaster_wall", 0.85, 0.0, 0.45, 0.6, 0.3, 0.18, 0.0, 0.35],
 	"ceramic":  ["painted_plaster_wall", 0.45, 0.0, 0.25, 0.35, 0.45, 0.3, 0.35, 0.6],
 	"floor":    ["worn_tile_floor", 0.9, 0.0, 0.5, 0.7, 0.18, 0.0, 0.0, 0.6],
-	"cliff":    ["castle_wall_slates", 0.95, 0.0, 0.6, 1.0, 0.12, 0.1, 0.0, 1.0],
-	"concrete": ["concrete_floor_worn_001", 0.9, 0.0, 0.5, 0.6, 0.2, 0.1, 0.0, 0.8],
+	"cliff":    ["castle_wall_slates", 0.95, 0.0, 0.6, 1.0, 0.12, 0.1, 0.0, 0.4],
+	"concrete": ["concrete_floor_worn_001", 0.9, 0.0, 0.5, 0.6, 0.2, 0.1, 0.0, 0.35],
 	"metal":    ["metal_plate", 0.42, 0.65, 0.35, 0.5, 0.35, 0.35, 0.6, 0.3],
 	"rust":     ["rusty_metal_02", 0.7, 0.35, 0.6, 0.8, 0.3, 0.2, 0.25, 0.6],
 	"cloth":    ["", 0.95, 0.0, 0.0, 0.0, 0.5, 0.45, 0.0, 0.0],
@@ -100,7 +100,7 @@ static func kind_for(family: String, color: Color, rough: float, metal: float) -
 
 
 ## Replaces the materials of an imported model with toon equivalents, keeping its albedo colour/texture.
-static func restyle(node: Node, kind: String, tint: Color = Color.WHITE) -> void:
+static func restyle(node: Node, kind: String, tint: Color = Color.WHITE, saturation: float = 1.0) -> void:
 	if node is MeshInstance3D:
 		var mi := node as MeshInstance3D
 		if mi.mesh != null:
@@ -111,9 +111,13 @@ static func restyle(node: Node, kind: String, tint: Color = Color.WHITE) -> void
 				if src is BaseMaterial3D:
 					col = (src as BaseMaterial3D).albedo_color * tint
 					tex = (src as BaseMaterial3D).albedo_texture
-				mi.set_surface_override_material(i, surface(kind, col, Color.BLACK, 0.0, tex))
+				var m := surface(kind, col, Color.BLACK, 0.0, tex)
+				if saturation < 1.0 and tex != null:
+					m = m.duplicate() as ShaderMaterial
+					m.set_shader_parameter("tex_saturation", saturation)
+				mi.set_surface_override_material(i, m)
 	for c in node.get_children():
-		restyle(c, kind, tint)
+		restyle(c, kind, tint, saturation)
 
 
 ## Full-screen ink outline attached to a camera. Skipped on the Low preset.
