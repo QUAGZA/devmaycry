@@ -40,9 +40,11 @@ func begin() -> void:
 	for pos in ms.def.shard_points:
 		shards.append({"pos": pos, "active": true, "t": 0.0})
 	beacon_idx = 0
-	for p in Game.players.values():
+	for p: Player in Game.players.values():
 		if is_instance_valid(p):
 			p.frozen = true
+			p.re_spent = false
+			p.ff_spent = true
 	ms.push_state()
 	Game.rpc_notice.rpc("RELIC RUSH\nEliminate (2) · collect Memory Shards (1) · hold the Relay Beacon (1 per 4 s) · first to %d" % RelicRules.TARGET, PRE_ROUND_TIME)
 	Game.log_ev("Round", "start", {"mode": "relic_rush", "shards": shards.size(), "beacons": ms.def.beacon_points.size()})
@@ -50,6 +52,32 @@ func begin() -> void:
 
 func spawn_protection() -> float:
 	return PROTECT
+
+
+## Relic Rush: every player may Reverse Entropy once per MATCH (no Fast-Forward in free-for-all).
+func request_ability(p: Player) -> void:
+	if phase != "live" and phase != "sudden_death":
+		return
+	if not p.alive or p.frozen or p.rewind_t > 0.0:
+		return
+	if p.re_spent:
+		if p.id > 0:
+			Game.rpc_notice.rpc_id(p.id, "REVERSE ENTROPY / SPENT THIS MATCH", 1.5)
+		return
+	if not p.recorder.has_span(HotReturnRules.REWIND_SECONDS - 0.15):
+		if p.id > 0:
+			Game.rpc_notice.rpc_id(p.id, "REVERSE ENTROPY / NOT ENOUGH HISTORY", 1.5)
+		return
+	p.re_spent = true
+	p.set_meta("restores", 0)
+	p.set_meta("restored_ids", [])
+	p.start_rewind(ms.match_time, HotReturnRules.REWIND_SECONDS)
+	Game.rpc_fx.rpc("rewind_start", p.id, p.global_position)
+	Game.log_ev("Ability", "reverse_entropy", {"id": p.id, "mode": "relic_rush"})
+
+
+func role_of(_team: int) -> String:
+	return "ffa"
 
 
 func beacon_pos() -> Vector3:

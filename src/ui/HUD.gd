@@ -518,7 +518,7 @@ func _refresh_state() -> void:
 		round_lbl.visible = false
 		role_lbl.visible = false
 		site_lbl.visible = false
-		objective_lbl.text = str(s.get("objective", "Eliminate (2), collect shards (1), hold the Beacon (1 / 4 s)"))
+		objective_lbl.text = str(s.get("objective", "Eliminate (2), collect shards (1), hold the Beacon (1 / 4 s)")) + "  ·  Reverse Entropy once per match"
 		mode_lbl.text = "RELIC RUSH / %s" % phase.to_upper().replace("_", " ")
 		ffa_box.visible = true
 		_refresh_ffa(s)
@@ -584,6 +584,11 @@ func _process(delta: float) -> void:
 			var spent := p.ff_spent if str(roles.get(p.team, "")) == "DEFEND" else p.re_spent
 			_update_charge(echo_card, not spent)
 			_update_hotreturn_live(p)
+		elif Game.mode_id == "relic_rush":
+			echo_card["name"].text = "REVERSE"
+			_update_charge(echo_card, not p.re_spent)
+			if p.rewind_t > 0.0:
+				hint_lbl.text = "REVERSE ENTROPY / RE-TRAVERSING YOUR ROUTE"
 		else:
 			_update_card(echo_card, p.echo_cd, 18.0)
 		protect_lbl.visible = p.spawn_protect_t > 0.0

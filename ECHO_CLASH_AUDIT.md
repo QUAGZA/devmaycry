@@ -37,13 +37,13 @@
 - Bots on all maps: PASS. Gates/ziplines/slings: PASS. Package: PASS.
 
 ## Rebuild checklist (brief order)
-- [ ] M1 Audit, baseline, spectator fix, 1080p, settings persistence
-- [ ] M2 LAN smoke on baseline
-- [ ] M3 Hot Return slice: Core volatility/history/lock, fields, Reverse Entropy, Fast-Forward, rounds/match
-- [ ] M4 Temporal destructibles with restoration and temporary cover
-- [ ] M5 Four projectile weapons, recoil, reload, switching, FF acceleration
-- [ ] M6 Map rework: size, vault/stabilizer pairs, fields off-route, route probe, props, portal markers
-- [ ] M7 Shaders, surface materials, humanoid rigs, audio buses and cues
-- [ ] M8 Compact HUD, circular minimap, Caps Lock map, main menu hero, settings
-- [ ] M9 LAN re-verify, bot fill, disconnects, exported exe
-- [ ] M10 Relic Rush adaptation, regression, docs, package
+- [x] M1 Audit, baseline, spectator fix, 1080p, settings persistence
+- [x] M2 LAN smoke on baseline
+- [x] M3 Hot Return slice: Core volatility/history/lock, fields, Reverse Entropy, Fast-Forward, rounds/match
+- [x] M4 Temporal destructibles with restoration and temporary cover
+- [x] M5 Four projectile weapons, recoil, reload, switching, FF acceleration
+- [x] M6 Map rework: size, vault/stabilizer pairs, fields off-route, route probe, props, portal markers
+- [x] M7 Shaders, surface materials, humanoid rigs, audio buses and cues
+- [x] M8 Compact HUD, circular minimap, Caps Lock map, main menu hero, settings
+- [x] M9 LAN re-verify, bot fill, disconnects, exported exe
+- [x] M10 Relic Rush adaptation, regression, docs, package

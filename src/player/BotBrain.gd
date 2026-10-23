@@ -115,7 +115,7 @@ func think(delta: float) -> void:
 			move = Vector2(strafe_dir * 0.8, fwd)
 			if p.dash_cd <= 0.0 and hurt_t > 0.0 and rng.randf() < float(prof["dash"]) * delta * 4.0:
 				buttons |= Player.BTN_DASH
-		if Game.match_server != null and Game.match_server.mode != "hot_return" and p.echo_cd <= 0.0 and rng.randf() < float(prof["echo"]) * delta * 0.8 and dist < 40.0:
+		if Game.match_server != null and Game.match_server.mode == "relic_rush" and not p.re_spent and p.hp < 50.0 and rng.randf() < float(prof["echo"]) * delta * 0.8 and dist < 40.0 and p.recorder.has_span(5.9):
 			buttons |= Player.BTN_ECHO
 	else:
 		if move != Vector2.ZERO:

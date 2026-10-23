@@ -121,6 +121,8 @@ func set_rewinding(on: bool) -> void:
 		return
 	_rewinding = on
 	for key in parts:
+		if not (parts[key] is MeshInstance3D):
+			continue
 		var mi: MeshInstance3D = parts[key]
 		if on:
 			mi.set_meta("mat", mi.material_override)
