@@ -15,6 +15,7 @@ Every "tested" claim points to a log or screenshot under `build/` produced by th
 | Oracle Gardens | Worn-tile floor and paving bands, buttressed perimeter with broken crowns, four corner bastions, two point-symmetric garden alcoves through the north/south walls (curved walls, basin, statue, trees), columned sanctuary on the upper terrace, arches over the four ramps, fractured obelisk with mint/orange faults, arches around the phase gates, hedges and trees, cliff and forest backdrop | `og_art_*.png`, `v6_play_1_20.png`, `alcove2_1_26.png`, `final_oracle_gardens_*.png` |
 | Tideline Exchange | Animated toon sea, pier piles, crane landmark through the exchange tower, two projecting piers with rails and cargo cover, seawall bastions, distant cranes and docks, zipline masts with hazard bands, pipes and rails | `art_tideline_exchange_*.png`, `pier_1_30.png`, `exe3_1_14.png` |
 | Vector Foundry | Rotating reactor rings, spindle struts, gantries, kiln stacks on the horizon, corner bastions, two machinery lobes with a press housing | `art_vector_foundry_*.png`, `lobe_fxaa_1_30.png`, `final_vector_foundry_*.png` |
+| Traversal / ambience | Vector slings: octagonal steel housing, four charge coils with signal bands, dotted trajectory arc from the real launch maths, landing ring. Per-map procedural ambience loops (garden wind and chimes, sea swell and wind, machine hum and press pulse) from `tools/gen_ambience.py` on the Ambience bus | `sling_1_14.png`, `"Audio","ambience"` log lines (20 s loops) |
 | Core / props | Causal Core containment device (glass shell, brass ribs, end caps, gyroscope band) with stable / unstable / critical / locked / stabilized colours; temporal barricades intact, damaged (fault glow), destroyed, restored, expired | `reg2_rewind_host.log`, `prop_safety2_host.log` |
 | Audio | Positional 3D one-shots: footsteps by surface (stone/concrete, metal on raised industrial decks), landing, shell casings, stone/metal/flesh impacts (Kenney CC0), on top of the 28 procedural cues | code path `Sfx.play_at` (audibility not verifiable headlessly) |
 | HUD / UI | Health and ammo panels anchored to the corners (no clipping), magazine/reserve split, compact ability chips, smaller notices, constant-size world labels; main menu renders the real Oracle Gardens with a cinematic orbit and the Core; PLAY / HOST LAN GAME / JOIN LAN GAME / SETTINGS / CREDITS / EXIT; two-column settings | `menu_v3_1_00.png`, `settings_v4_1_00.png`, `v5_play_1_30.png` |
@@ -35,8 +36,6 @@ Oracle Gardens 217-239 FPS, Tideline Exchange 214-279 FPS, Vector Foundry 215-25
   each fore-end exactly, and ADS is an approximate offset rather than a sight-aligned pose.
 - Character clips come from a pistol aim set (the free animation library has no rifle set).
 - MSAA shows edge-dot artifacts with the toon shader on this renderer; FXAA is the default for that reason.
-- No dedicated ambience loop; the sea and machinery are silent beyond the existing cues.
-- Vector slings (launch pads) keep their previous visuals; no new charge or landing-indicator art.
 
 ## Implemented and tested (Hot Return rebuild)
 

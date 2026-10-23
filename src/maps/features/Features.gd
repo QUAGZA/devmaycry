@@ -312,6 +312,57 @@ class VectorSling extends Area3D:
 		marker.material_override = Features.glow_mat(Palette.VERMILION, 2.0, 0.8)
 		add_child(marker)
 		add_child(Features.label("LANDING %s" % sname, land - pos + Vector3(0, 2.0, 0), Palette.VERMILION, 40))
+		# mechanism: steel housing ring, four charge coils with signal bands, and a faint dotted
+		# trajectory arc computed from the same flight time and gravity the launch uses
+		var steel := Style.surface("metal", Color("4A505A"))
+		var housing := MeshInstance3D.new()
+		var hm := CylinderMesh.new()
+		hm.top_radius = 2.15
+		hm.bottom_radius = 2.35
+		hm.height = 0.22
+		hm.radial_segments = 8
+		housing.mesh = hm
+		housing.position = Vector3(0, 0.11, 0)
+		housing.material_override = steel
+		add_child(housing)
+		for k in 4:
+			var a := k * TAU / 4.0 + PI * 0.25
+			var coil := MeshInstance3D.new()
+			var cc := CylinderMesh.new()
+			cc.top_radius = 0.16
+			cc.bottom_radius = 0.2
+			cc.height = 1.1
+			coil.mesh = cc
+			coil.position = Vector3(cos(a) * 2.1, 0.55, sin(a) * 2.1)
+			coil.material_override = steel
+			add_child(coil)
+			for b in 3:
+				var band := MeshInstance3D.new()
+				var bt := TorusMesh.new()
+				bt.inner_radius = 0.17
+				bt.outer_radius = 0.24
+				band.mesh = bt
+				band.position = coil.position + Vector3(0, -0.3 + b * 0.3, 0)
+				band.material_override = Features.glow_mat(Color("E2683A"), 1.4)
+				add_child(band)
+		var rel := land - pos
+		var t := maxf(flight_time, 0.3)
+		var vy := (rel.y + 0.5 * 18.0 * t * t) / t
+		var dot_mat := Features.glow_mat(Palette.VERMILION, 1.2, 0.45)
+		for i in range(1, 12):
+			var f := float(i) / 12.0
+			var tt := f * t
+			var d := MeshInstance3D.new()
+			var sp := SphereMesh.new()
+			sp.radius = 0.09
+			sp.height = 0.18
+			sp.radial_segments = 8
+			sp.rings = 4
+			d.mesh = sp
+			d.position = Vector3(rel.x * f, vy * tt - 0.5 * 18.0 * tt * tt + 0.6, rel.z * f)
+			d.material_override = dot_mat
+			d.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(d)
 
 	func _physics_process(delta: float) -> void:
 		arrow.position.y = 0.3 + 0.1 * sin(Time.get_ticks_msec() / 250.0)

@@ -9,6 +9,25 @@ static func _fix_label(l: Label3D) -> void:
 	l.outline_size = maxi(l.outline_size, 8)
 
 
+## Looping map ambience on the Ambience bus (procedural beds from tools/gen_ambience.py).
+func _start_ambience(def: MapDef) -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var path := "res://assets/sfx/amb_%s.wav" % {"oracle": "oracle", "tideline": "tideline", "foundry": "foundry"}.get(def.family, "oracle")
+	if not ResourceLoader.exists(path):
+		return
+	var st := load(path) as AudioStreamWAV
+	if st == null:
+		return
+	var pl := AudioStreamPlayer.new()
+	pl.stream = st
+	pl.bus = "Ambience" if AudioServer.get_bus_index("Ambience") >= 0 else "Master"
+	pl.volume_db = -14.0
+	add_child(pl)
+	pl.play()
+	Game.log_ev("Audio", "ambience", {"map": def.id, "stream": path, "loop_mode": st.loop_mode, "length_s": snappedf(st.get_length(), 0.1)})
+
+
 func _ready() -> void:
 	var world := $World as Node3D
 	var def := Maps.make(Game.map_id)
@@ -23,6 +42,7 @@ func _ready() -> void:
 	objectives.set_script(load("res://src/match/Objectives.gd"))
 	add_child(objectives)
 	Game.on_match_scene_ready(world, def)
+	_start_ambience(def)
 	if DisplayServer.get_name() != "headless":
 		get_tree().create_timer(0.8).timeout.connect(func() -> void:
 			for l in world.find_children("*", "Label3D", true, false):
