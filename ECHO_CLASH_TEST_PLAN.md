@@ -26,6 +26,8 @@ binary on 2026-10-23.
 | F03 | Vector sling launches along arc from pad centre | `feat_sling.log` | PASS |
 | M01 | Navmesh reachability of every raised deck / site on all maps | `navprobe*.log` | PASS |
 | P01 | Windowed run renders arena, HUD, viewmodel; screenshots saved | `build/shots/*.png` | PASS |
+| X01 | Exported `build/EchoClash.exe` runs headless as host and client, 2v2 with bots on Tideline Exchange, round completes | `exe_host.log`, `exe_client.log` | PASS |
+| X02 | `tools/net_test.ps1 -Clients 2 -Bots` passes on all three logs | console output | PASS |
 
 ## Manual (for the human tester)
 
