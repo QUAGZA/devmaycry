@@ -604,7 +604,10 @@ func _process(delta: float) -> void:
 		if p.stagger_t > 0.0:
 			hint = "STAGGERED"
 		elif p.carrying_core:
-			hint = "CARRYING THE RESONANCE CORE / hold E inside a site to plant"
+			if Game.mode_id == "hot_return":
+				hint = "CARRYING THE CAUSAL CORE / reach your home Stabilizer before it detonates"
+			else:
+				hint = "CARRYING THE RESONANCE CORE / hold E inside a site to plant"
 		hint_lbl.text = hint
 		if minimap.view_radius != 42.0:
 			pass

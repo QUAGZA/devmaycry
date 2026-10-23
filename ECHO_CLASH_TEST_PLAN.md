@@ -18,6 +18,7 @@ PASS = run and observed in a log or screenshot under `build/`. NOT RUN = needs a
 | M6 | Route probe per map: direct 124–133 m (29–32 s > 26 s fuse), both-field route 145–152 m (20–22 s exposure) | `route_*.log` |
 | M6b | Hard bots on all three maps: attackers rush the vault, defenders guard it, eliminations | `hrbots_*.log` |
 | M7 | Shaders compile and render (core, field, portal, surface, rewind, fast-forward, minimap mask); rigs visible | `look_*.png`, `hud_1_07.png` |
+| M7b | In-game captures: Core carried through Stability Field B (allowance 7.0 → 0.0 s), Reverse Entropy drop at 40.3 % rewound to 27.3 % and frozen with lock countdown, PICK UP state after the lock, Fast-Forward ring around the defender with the notice | `hr_play_1_32/41/47/53/59.png`, `hr_ff_1_28.png`, `shot_hr_play.log`, `shot_hr_ff.log` |
 | M8 | Minimap with LOS-only enemies, Caps Lock map, settings persistence, 1920x1080 windowed | `hud_1_13.png`, `menu_1_00.png`, `winprobe2.log` |
 | M9 | Room code discovery on the current LAN address, exported exe as host + client with bots | `reg_code_client.log`, `exe2_host.log`, `exe2_client.log` |
 | M10 | Relic Rush bots: points, beacon rotation, once-per-match rewinds | `reg_relic.log`, `reg_relic2.log` |
