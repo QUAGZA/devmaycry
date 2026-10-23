@@ -11,6 +11,11 @@ const BTN_DASH := 16
 const BTN_ECHO := 32
 const BTN_INTERACT := 64
 const BTN_RELOAD := 128
+const BTN_ADS := 256
+const BTN_SLOT1 := 512
+const BTN_SLOT2 := 1024
+const BTN_SLOT3 := 2048
+const BTN_SLOT4 := 4096
 
 const WALK_SPEED := 6.0
 const SPRINT_SPEED := 8.6
@@ -46,6 +51,7 @@ const F_RE_SPENT := 512
 const F_FF_SPENT := 1024
 const F_REWIND := 2048
 const F_FF := 4096
+const F_ADS := 8192
 const CARRY_SPEED := 4.2
 
 var id := 0
@@ -87,6 +93,15 @@ var inp_buttons := 0
 var inp_seq := 0
 var _prev_buttons := 0
 var recorder: EchoBuffer = EchoBuffer.new()
+var weapon_id := "rifle"
+var ammo_state: Dictionary = {}
+var reserve := 90
+var spray := 0.0
+var spray_t := 0.0
+var ads := false
+var switch_t := 0.0
+var viewmodels: Dictionary = {}
+var _fov_target := 86.0
 var brain = null
 var _local := false
 var _net_pos := Vector3.ZERO
@@ -159,6 +174,7 @@ func _init() -> void:
 	viewmodel.visible = false
 	cam.add_child(viewmodel)
 	_build_viewmodel()
+	_reset_ammo()
 	tag = Label3D.new()
 	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	tag.position = Vector3(0, 2.25, 0)
@@ -168,40 +184,111 @@ func _init() -> void:
 	add_child(tag)
 
 
+func _vm_box(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size
+	mi.mesh = bm
+	mi.position = pos
+	mi.material_override = mat
+	parent.add_child(mi)
+	return mi
+
+
+func _vm_cyl(parent: Node3D, radius: float, height: float, pos: Vector3, mat: Material, along_z: bool = true) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = radius
+	cm.bottom_radius = radius
+	cm.height = height
+	mi.mesh = cm
+	mi.position = pos
+	if along_z:
+		mi.rotation_degrees = Vector3(90, 0, 0)
+	mi.material_override = mat
+	parent.add_child(mi)
+	return mi
+
+
+## Four original first-person weapon models built from parts (ink body, porcelain grips, brass/mint accents).
 func _build_viewmodel() -> void:
 	vm_mat = StandardMaterial3D.new()
 	vm_mat.albedo_color = Palette.INK
 	vm_mat.roughness = 0.35
 	vm_mat.metallic = 0.5
-	var body := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = Vector3(0.06, 0.08, 0.34)
-	body.mesh = bm
-	body.material_override = vm_mat
-	viewmodel.add_child(body)
-	var grip := MeshInstance3D.new()
-	var gm := BoxMesh.new()
-	gm.size = Vector3(0.05, 0.12, 0.07)
-	grip.mesh = gm
-	grip.position = Vector3(0, -0.09, 0.08)
-	var gmat := StandardMaterial3D.new()
-	gmat.albedo_color = Palette.PORCELAIN
-	grip.material_override = gmat
-	viewmodel.add_child(grip)
-	var ring := MeshInstance3D.new()
-	var rm := TorusMesh.new()
-	rm.inner_radius = 0.028
-	rm.outer_radius = 0.05
-	ring.mesh = rm
-	ring.rotation_degrees = Vector3(90, 0, 0)
-	ring.position = Vector3(0, 0, -0.2)
-	var rmat := StandardMaterial3D.new()
-	rmat.albedo_color = Palette.MINT
-	rmat.emission_enabled = true
-	rmat.emission = Palette.MINT
-	rmat.emission_energy_multiplier = 2.0
-	ring.material_override = rmat
-	viewmodel.add_child(ring)
+	var porcelain := StandardMaterial3D.new()
+	porcelain.albedo_color = Palette.PORCELAIN
+	porcelain.roughness = 0.5
+	var brass := StandardMaterial3D.new()
+	brass.albedo_color = Palette.BRASS
+	brass.metallic = 0.8
+	brass.roughness = 0.3
+	for wid in Weapons.ORDER:
+		var root := Node3D.new()
+		root.name = wid
+		var col := Color(str(Weapons.get_data(wid)["color"]))
+		var glow := StandardMaterial3D.new()
+		glow.albedo_color = col
+		glow.emission_enabled = true
+		glow.emission = col
+		glow.emission_energy_multiplier = 2.0
+		match wid:
+			"rifle":
+				_vm_box(root, Vector3(0.06, 0.08, 0.42), Vector3(0, 0, -0.02), vm_mat)
+				_vm_box(root, Vector3(0.05, 0.12, 0.06), Vector3(0, -0.09, 0.1), porcelain)
+				_vm_box(root, Vector3(0.04, 0.14, 0.05), Vector3(0, -0.1, -0.06), vm_mat)
+				_vm_cyl(root, 0.014, 0.2, Vector3(0, 0.02, -0.3), brass)
+				_vm_box(root, Vector3(0.02, 0.02, 0.05), Vector3(0, 0.06, -0.12), glow)
+			"shotgun":
+				_vm_cyl(root, 0.03, 0.46, Vector3(0, 0.0, -0.08), vm_mat)
+				_vm_cyl(root, 0.022, 0.3, Vector3(0, -0.045, -0.12), porcelain)
+				_vm_box(root, Vector3(0.07, 0.11, 0.1), Vector3(0, -0.07, 0.14), porcelain)
+				_vm_box(root, Vector3(0.05, 0.05, 0.1), Vector3(0, -0.04, -0.18), brass)
+				_vm_box(root, Vector3(0.02, 0.02, 0.03), Vector3(0, 0.04, -0.3), glow)
+			"sniper":
+				_vm_box(root, Vector3(0.05, 0.07, 0.6), Vector3(0, 0, -0.1), vm_mat)
+				_vm_cyl(root, 0.012, 0.36, Vector3(0, 0.0, -0.5), brass)
+				_vm_cyl(root, 0.035, 0.18, Vector3(0, 0.085, -0.08), vm_mat)
+				_vm_cyl(root, 0.03, 0.01, Vector3(0, 0.085, -0.17), glow)
+				_vm_box(root, Vector3(0.05, 0.12, 0.06), Vector3(0, -0.09, 0.12), porcelain)
+			"mg":
+				_vm_box(root, Vector3(0.09, 0.11, 0.46), Vector3(0, 0, -0.02), vm_mat)
+				_vm_box(root, Vector3(0.1, 0.09, 0.14), Vector3(-0.07, -0.03, 0.02), porcelain)
+				_vm_cyl(root, 0.02, 0.22, Vector3(0, 0.02, -0.34), brass)
+				_vm_box(root, Vector3(0.05, 0.13, 0.06), Vector3(0, -0.1, 0.12), porcelain)
+				_vm_box(root, Vector3(0.025, 0.025, 0.08), Vector3(0.04, 0.06, -0.1), glow)
+		root.visible = wid == weapon_id
+		viewmodel.add_child(root)
+		viewmodels[wid] = root
+
+
+func _reset_ammo() -> void:
+	ammo_state.clear()
+	for wid in Weapons.ORDER:
+		var w := Weapons.get_data(wid)
+		ammo_state[wid] = {"mag": int(w["mag"]), "reserve": int(w["reserve"])}
+	ammo = int(ammo_state[weapon_id]["mag"])
+	reserve = int(ammo_state[weapon_id]["reserve"])
+	spray = 0.0
+
+
+func _switch_weapon(wid: String) -> void:
+	if wid == weapon_id or not Weapons.DATA.has(wid):
+		return
+	ammo_state[weapon_id] = {"mag": ammo, "reserve": reserve}
+	weapon_id = wid
+	ammo = int(ammo_state[wid]["mag"])
+	reserve = int(ammo_state[wid]["reserve"])
+	reload_t = 0.0
+	spray = 0.0
+	switch_t = float(Weapons.get_data(wid)["switch"])
+	fire_cd = maxf(fire_cd, switch_t)
+	Game.rpc_fx.rpc("switch", id, global_position)
+
+
+func _update_viewmodel() -> void:
+	for wid in viewmodels:
+		viewmodels[wid].visible = wid == weapon_id
 
 
 func setup(id_: int, info: Dictionary) -> void:
@@ -279,6 +366,16 @@ func gather_input() -> Array:
 		b |= BTN_INTERACT
 	if Input.is_action_pressed("reload"):
 		b |= BTN_RELOAD
+	if Input.is_action_pressed("ads"):
+		b |= BTN_ADS
+	if Input.is_action_just_pressed("slot1"):
+		b |= BTN_SLOT1
+	if Input.is_action_just_pressed("slot2"):
+		b |= BTN_SLOT2
+	if Input.is_action_just_pressed("slot3"):
+		b |= BTN_SLOT3
+	if Input.is_action_just_pressed("slot4"):
+		b |= BTN_SLOT4
 	return [move, yaw, pitch, b]
 
 
@@ -325,6 +422,7 @@ func server_step(delta: float) -> void:
 		speed = CROUCH_SPEED
 	if staggered:
 		speed *= 0.45
+	speed *= float(Weapons.get_data(weapon_id)["move_mult"])
 	if carrying_core:
 		speed = CARRY_SPEED
 		sprinting = false
@@ -359,15 +457,7 @@ func server_step(delta: float) -> void:
 		velocity.z = move_toward(velocity.z, target.z, accel * delta)
 	_step_up(delta)
 	move_and_slide()
-	if reload_t > 0.0:
-		pass
-	elif (pressed & BTN_RELOAD) != 0 and ammo < MAG_SIZE:
-		_start_reload()
-	elif (pressed & BTN_FIRE) != 0 and fire_cd <= 0.0 and not staggered:
-		if ammo > 0:
-			_shoot()
-		else:
-			_start_reload()
+	_weapon_logic(pressed, staggered)
 	interact_held = (inp_buttons & BTN_INTERACT) != 0
 	if (pressed & BTN_ECHO) != 0 and Game.match_server != null:
 		Game.match_server.request_ability(self)
@@ -430,15 +520,7 @@ func _step_rewind(delta: float, pressed: int) -> void:
 	rewind_t = maxf(0.0, rewind_t - delta)
 	if Game.match_server != null:
 		Game.match_server.on_rewind_pass(self, target_t)
-	if reload_t > 0.0:
-		pass
-	elif (pressed & BTN_RELOAD) != 0 and ammo < MAG_SIZE:
-		_start_reload()
-	elif (pressed & BTN_FIRE) != 0 and fire_cd <= 0.0:
-		if ammo > 0:
-			_shoot()
-		else:
-			_start_reload()
+	_weapon_logic(pressed, false)
 	if rewind_t <= 0.0:
 		collision_mask = 1 | 2 | TEMPORAL_LAYER
 		_settle_after_rewind()
@@ -467,40 +549,84 @@ func _tick_timers(delta: float) -> void:
 	spawn_protect_t = maxf(0.0, spawn_protect_t - delta)
 	zip_t = maxf(0.0, zip_t - delta)
 	launch_t = maxf(0.0, launch_t - delta)
+	switch_t = maxf(0.0, switch_t - delta)
+	if spray_t > 0.0:
+		spray_t -= delta
+	else:
+		spray = maxf(0.0, spray - delta * float(Weapons.get_data(weapon_id)["recover"]))
 	if reload_t > 0.0:
 		reload_t = maxf(0.0, reload_t - delta)
 		if reload_t <= 0.0:
-			ammo = MAG_SIZE
+			var need := int(Weapons.get_data(weapon_id)["mag"]) - ammo
+			var take := mini(need, reserve)
+			ammo += take
+			reserve -= take
 
 
 func _start_reload() -> void:
-	reload_t = RELOAD_TIME
+	if reserve <= 0 or ammo >= int(Weapons.get_data(weapon_id)["mag"]):
+		return
+	reload_t = float(Weapons.get_data(weapon_id)["reload"])
 	Game.rpc_fx.rpc("reload", id, global_position)
 
 
+func _weapon_logic(pressed: int, staggered: bool) -> void:
+	ads = (inp_buttons & BTN_ADS) != 0
+	if (pressed & BTN_SLOT1) != 0:
+		_switch_weapon("rifle")
+	elif (pressed & BTN_SLOT2) != 0:
+		_switch_weapon("shotgun")
+	elif (pressed & BTN_SLOT3) != 0:
+		_switch_weapon("sniper")
+	elif (pressed & BTN_SLOT4) != 0:
+		_switch_weapon("mg")
+	var w := Weapons.get_data(weapon_id)
+	if reload_t > 0.0 or switch_t > 0.0:
+		return
+	if (pressed & BTN_RELOAD) != 0 and ammo < int(w["mag"]) and reserve > 0:
+		_start_reload()
+		return
+	var want_fire := (inp_buttons & BTN_FIRE) != 0 if bool(w["auto"]) else (pressed & BTN_FIRE) != 0
+	if want_fire and fire_cd <= 0.0 and not staggered:
+		if ammo > 0:
+			_shoot()
+		else:
+			_start_reload()
+
+
+func _cone(base: Vector3, half_angle: float) -> Vector3:
+	if half_angle <= 0.0:
+		return base
+	var helper := Vector3.RIGHT if absf(base.dot(Vector3.RIGHT)) < 0.9 else Vector3.FORWARD
+	var up := base.cross(helper).normalized()
+	var right := base.cross(up).normalized()
+	var phi := randf() * TAU
+	var r := half_angle * sqrt(randf())
+	return (base + up * r * sin(phi) + right * r * cos(phi)).normalized()
+
+
 func _shoot() -> void:
+	var w := Weapons.get_data(weapon_id)
 	ammo -= 1
-	fire_cd = FIRE_COOLDOWN
+	fire_cd = float(w["rof"])
 	spawn_protect_t = 0.0
+	var moving := Vector3(velocity.x, 0.0, velocity.z).length() > 1.0
+	var sp := Weapons.spread(weapon_id, spray, moving, not is_on_floor(), crouching, ads)
+	var kick := Weapons.recoil(weapon_id, int(spray))
 	var from := eye_position()
-	var dir := aim_dir()
-	var to := from + dir * WEAPON_RANGE
-	var hit := trace_shot(from, to)
-	var hit_id := 0
-	var hit_pos := to
-	if not hit.is_empty():
-		hit_pos = hit["position"]
-		var col = hit["collider"]
-		if col is Player:
-			hit_id = col.id
-			col.apply_damage(DAMAGE, id, "pulse", 0.0)
-		elif col != null:
-			var echo = col if col.has_method("hit_by_shot") else col.get_parent()
-			if echo != null and echo.has_method("hit_by_shot"):
-				echo.hit_by_shot(id)
-				hit_id = -9999
+	var base := aim_dir()
+	for i in int(w["pellets"]):
+		var dir := _cone(base, sp)
+		Game.projectiles.fire(id, weapon_id, from + dir * 0.45, dir * float(w["velocity"]), float(w["damage"]), get_rid())
+	spray += 1.0
+	spray_t = 0.3
+	pitch = clampf(pitch + kick.y, -1.45, 1.45)
+	yaw = wrapf(yaw - kick.x, -PI, PI)
+	if id > 1 and not is_bot:
+		Game.rpc_recoil.rpc_id(id, -kick.x, kick.y)
 	recorder.push_event(_now(), EchoBuffer.EVT_FIRE, yaw, pitch)
-	Game.rpc_shot.rpc(id, from, hit_pos, hit_id)
+	Game.rpc_muzzle.rpc(id, weapon_id)
+	Game.log_ev("Weapon", "fire", {"id": id, "weapon": weapon_id, "pellets": int(w["pellets"]), "spray": int(spray), "ads": ads})
 
 
 func trace_shot(from: Vector3, to: Vector3) -> Dictionary:
@@ -552,8 +678,11 @@ func _die(killer_id: int, cause: String) -> void:
 func respawn(pos: Vector3, yaw_: float, protect: float) -> void:
 	hp = MAX_HP
 	alive = true
-	ammo = MAG_SIZE
+	weapon_id = "rifle"
+	_reset_ammo()
+	_update_viewmodel()
 	reload_t = 0.0
+	switch_t = 0.0
 	fire_cd = 0.0
 	dash_cd = 0.0
 	dash_t = 0.0
@@ -615,8 +744,10 @@ func pack_state() -> Array:
 		f |= F_REWIND
 	if ff_until > 0.0 and Game.match_server != null and Game.match_server.match_time < ff_until:
 		f |= F_FF
+	if ads:
+		f |= F_ADS
 	flags = f
-	return [id, global_position, yaw, pitch, hp, ammo, f, reload_t, dash_cd, echo_cd, stagger_t, spawn_protect_t, velocity]
+	return [id, global_position, yaw, pitch, hp, ammo, f, reload_t, dash_cd, echo_cd, stagger_t, spawn_protect_t, velocity, Weapons.ORDER.find(weapon_id), reserve]
 
 
 func apply_state(s: Array) -> void:
@@ -643,6 +774,13 @@ func apply_state(s: Array) -> void:
 	ff_spent = (flags & F_FF_SPENT) != 0
 	rewind_t = 1.0 if (flags & F_REWIND) != 0 else 0.0
 	ff_until = 1.0 if (flags & F_FF) != 0 else 0.0
+	ads = (flags & F_ADS) != 0
+	if s.size() > 14:
+		var wid: String = Weapons.ORDER[clampi(int(s[13]), 0, Weapons.ORDER.size() - 1)]
+		if wid != weapon_id:
+			weapon_id = wid
+			_update_viewmodel()
+		reserve = int(s[14])
 	if (old_flags & F_ALIVE) != (flags & F_ALIVE):
 		_apply_flags_visual()
 	if _net_prev.distance_to(_net_pos) > 6.0:
@@ -658,6 +796,10 @@ func _apply_flags_visual() -> void:
 
 func _process(delta: float) -> void:
 	_view_kick = lerpf(_view_kick, 0.0, 14.0 * delta)
+	if _local:
+		var local_ads := ads if multiplayer.is_server() else (Input.is_action_pressed("ads") and Game.autopilot == null and not Game.paused_local)
+		_fov_target = float(Weapons.get_data(weapon_id)["ads_fov"]) if local_ads and alive else 86.0
+		cam.fov = lerpf(cam.fov, _fov_target, minf(1.0, 12.0 * delta))
 	if viewmodel.visible:
 		viewmodel.position = Vector3(0.34, -0.27 - _view_kick * 0.02, -0.62 + _view_kick * 0.08)
 		viewmodel.rotation.x = _view_kick * 0.12
@@ -679,6 +821,11 @@ func _process(delta: float) -> void:
 
 func kick_view() -> void:
 	_view_kick = 1.0
+
+
+func apply_recoil(dyaw: float, dpitch: float) -> void:
+	yaw = wrapf(yaw + dyaw, -PI, PI)
+	pitch = clampf(pitch + dpitch, -1.45, 1.45)
 
 
 static func ff_sens_mult() -> float:

@@ -37,6 +37,7 @@ var _hit_t := 0.0
 var _flash_t := 0.0
 var _feed_items: Array = []
 var _last_warn := -1
+var _last_ads := false
 var vol_box: VBoxContainer
 var vol_lbl: Label
 var vol_bar: ColorRect
@@ -520,19 +521,23 @@ func _process(delta: float) -> void:
 	timer_lbl.text = "%02d:%02d" % [int(tl) / 60, int(tl) % 60]
 	var warn := tl <= 10.0 and tl > 0.0
 	timer_lbl.add_theme_color_override("font_color", Palette.VERMILION if warn else Palette.INK)
+	if p != null and is_instance_valid(p) and p.ads != _last_ads:
+		_last_ads = p.ads
+		crosshair.queue_redraw()
 	if p != null and is_instance_valid(p):
 		hp_lbl.text = "%03d" % int(ceil(p.hp))
 		hp_bar.size.x = 260.0 * clampf(p.hp / Player.MAX_HP, 0.0, 1.0)
 		hp_bar.color = Palette.MINT if p.hp > 50 else (Palette.BRASS if p.hp > 25 else Palette.VERMILION)
-		ammo_lbl.text = "%02d" % p.ammo
+		ammo_lbl.text = "%02d / %03d" % [p.ammo, p.reserve]
+		var wname := str(Weapons.get_data(p.weapon_id)["name"])
 		if p.reload_t > 0.0:
-			ammo_state_lbl.text = "RELOADING %0.1f" % p.reload_t
+			ammo_state_lbl.text = "%s / RELOADING %0.1f" % [wname, p.reload_t]
 			ammo_state_lbl.add_theme_color_override("font_color", Palette.BRASS)
 		elif p.ammo == 0:
-			ammo_state_lbl.text = "EMPTY / PRESS R"
+			ammo_state_lbl.text = "%s / EMPTY / PRESS R" % wname if p.reserve > 0 else "%s / NO AMMO" % wname
 			ammo_state_lbl.add_theme_color_override("font_color", Palette.VERMILION)
 		else:
-			ammo_state_lbl.text = "PULSE CASTER"
+			ammo_state_lbl.text = "%s / %d" % [wname, int(Weapons.get_data(p.weapon_id)["slot"])]
 			ammo_state_lbl.add_theme_color_override("font_color", Palette.MINT)
 		_update_card(dash_card, p.dash_cd, Player.DASH_COOLDOWN)
 		if Game.mode_id == "hot_return":
@@ -677,9 +682,18 @@ func _refresh_scoreboard() -> void:
 
 func _draw_crosshair() -> void:
 	var c := Palette.VERMILION if _hit_t > 0.0 else Palette.PORCELAIN
-	var gap := 6.0
-	var len := 9.0
+	var p := Game.local_player
+	var ads_now := p != null and is_instance_valid(p) and p.ads
+	var gap := 3.0 if ads_now else 6.0
+	var len := 7.0 if ads_now else 9.0
 	var w := 2.0
+	if ads_now and p.weapon_id == "sniper":
+		crosshair.draw_arc(Vector2.ZERO, 120.0, 0.0, TAU, 96, Color(c, 0.9), 2.0)
+		crosshair.draw_arc(Vector2.ZERO, 40.0, 0.0, TAU, 48, Color(c, 0.6), 1.0)
+		crosshair.draw_line(Vector2(-120, 0), Vector2(-40, 0), c, 1.0)
+		crosshair.draw_line(Vector2(40, 0), Vector2(120, 0), c, 1.0)
+		crosshair.draw_line(Vector2(0, -120), Vector2(0, -40), c, 1.0)
+		crosshair.draw_line(Vector2(0, 40), Vector2(0, 120), c, 1.0)
 	crosshair.draw_line(Vector2(-gap - len, 0), Vector2(-gap, 0), c, w)
 	crosshair.draw_line(Vector2(gap, 0), Vector2(gap + len, 0), c, w)
 	crosshair.draw_line(Vector2(0, -gap - len), Vector2(0, -gap), c, w)

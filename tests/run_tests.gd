@@ -13,6 +13,8 @@ func _init() -> void:
 		_test_relic_rules()
 	if ResourceLoader.exists("res://src/rules/HotReturnRules.gd"):
 		_test_hot_return_rules()
+	if ResourceLoader.exists("res://src/weapons/Weapons.gd"):
+		_test_weapons()
 	print("[Tests] passed=%d failed=%d" % [_passes, _fails])
 	quit(1 if _fails > 0 else 0)
 
@@ -129,6 +131,24 @@ func _test_hot_return_rules() -> void:
 	check(float(e["volatility"]) >= 100.0, "a 128 m direct run without pauses detonates")
 	e = R.route_exposure(150.0, 14.0)
 	check(float(e["volatility"]) < 100.0, "a 150 m field route with 14 s of pauses survives")
+
+
+func _test_weapons() -> void:
+	print("[Tests] Weapons")
+	var W = load("res://src/weapons/Weapons.gd")
+	for wid in ["rifle", "shotgun", "sniper", "mg"]:
+		var ok := true
+		for n in 30:
+			var k: Vector2 = W.recoil(wid, n)
+			if k.y <= 0.0 or k.y > 0.1 or absf(k.x) > 0.05:
+				ok = false
+		check(ok, "%s recoil climbs upward and stays bounded over 30 shots" % wid)
+		check(W.spread(wid, 0.0, false, false, false, false) <= W.spread(wid, 20.0, false, false, false, false), "%s sustained fire never tightens" % wid)
+		check(W.spread(wid, 0.0, true, false, false, false) > W.spread(wid, 0.0, false, false, false, false), "%s moving widens the cone" % wid)
+		check(W.spread(wid, 0.0, false, false, false, true) < W.spread(wid, 0.0, false, false, false, false), "%s aiming tightens the cone" % wid)
+	check(W.damage_at("rifle", 10.0) == 24.0 and W.damage_at("rifle", 280.0) < 24.0, "rifle damage falls off beyond its range")
+	check(int(W.get_data("shotgun")["pellets"]) == 8 and int(W.get_data("mg")["mag"]) == 100 and int(W.get_data("sniper")["mag"]) == 5, "weapon classes carry distinct magazine and pellet definitions")
+	check(W.recoil("rifle", 10).x != 0.0 and W.recoil("mg", 10).x != W.recoil("rifle", 10).x, "patterns differ between weapons")
 
 
 func _test_relic_rules() -> void:

@@ -33,6 +33,7 @@ var map_id := "oracle_gardens"
 var mode_id := "hot_return"
 var match_server: MatchServer = null
 var autopilot = null
+var projectiles: ProjectileManager = null
 var paused_local := false
 var echoes: Dictionary = {}
 var props: Dictionary = {}
@@ -47,10 +48,14 @@ var _shot_elapsed := 0.0
 var _log_snap_t := 0.0
 var _probed := false
 var _window_logged := false
+var _probe_stage := 0
 
 
 func _ready() -> void:
 	_parse_args()
+	projectiles = ProjectileManager.new()
+	projectiles.name = "Projectiles"
+	add_child(projectiles)
 	if args.has("quit-after-sec"):
 		_quit_t = float(args["quit-after-sec"])
 	if args.has("auto"):
@@ -142,6 +147,8 @@ func _clear_match_nodes() -> void:
 	players.clear()
 	echoes.clear()
 	props.clear()
+	if projectiles != null:
+		projectiles.clear()
 	local_player = null
 	world = null
 	map_def = null
@@ -356,6 +363,22 @@ func _process(delta: float) -> void:
 		_window_logged = true
 		var ws := DisplayServer.window_get_size()
 		log_ev("Boot", "window_settled", {"window": [ws.x, ws.y], "mode": DisplayServer.window_get_mode(), "note": Settings.last_window_note})
+	if args.has("winprobe") and DisplayServer.get_name() != "headless":
+		var ms := Time.get_ticks_msec()
+		if ms > 1000 and _probe_stage == 0:
+			_probe_stage = 1
+			log_ev("Win", "probe", {"stage": 1, "size": DisplayServer.window_get_size(), "mode": DisplayServer.window_get_mode(), "fs_const": DisplayServer.WINDOW_MODE_FULLSCREEN, "max_const": DisplayServer.WINDOW_MODE_MAXIMIZED, "screen": DisplayServer.screen_get_size(), "scale": DisplayServer.screen_get_scale(), "pref_fs": Settings.fullscreen, "pref_res": Settings.resolution})
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+			DisplayServer.window_set_size(Vector2i(1920, 1080))
+		elif ms > 2000 and _probe_stage == 1:
+			_probe_stage = 2
+			log_ev("Win", "probe", {"stage": 2, "size": DisplayServer.window_get_size(), "mode": DisplayServer.window_get_mode(), "pos": DisplayServer.window_get_position()})
+			get_window().mode = Window.MODE_WINDOWED
+			get_window().size = Vector2i(1920, 1080)
+			get_window().position = Vector2i(100, 100)
+		elif ms > 3200 and _probe_stage == 2:
+			_probe_stage = 3
+			log_ev("Win", "probe", {"stage": 3, "size": DisplayServer.window_get_size(), "mode": DisplayServer.window_get_mode(), "pos": DisplayServer.window_get_position(), "win_size": get_window().size, "content_scale": get_window().content_scale_factor})
 	if _quit_t >= 0.0:
 		_quit_t -= delta
 		if _quit_t <= 0.0:
@@ -499,6 +522,40 @@ func rpc_echo_end(eid: int, reason: String) -> void:
 	if e != null and is_instance_valid(e):
 		e.finish(reason)
 	echoes.erase(eid)
+
+
+@rpc("authority", "call_remote", "unreliable_ordered")
+func rpc_projectile_spawn(id: int, origin: Vector3, velocity: Vector3, weapon: String) -> void:
+	projectiles.on_spawn(id, origin, velocity, weapon)
+
+
+@rpc("authority", "call_remote", "unreliable_ordered")
+func rpc_projectile_accel(id: int, factor: float) -> void:
+	projectiles.on_accel(id, factor)
+
+
+@rpc("authority", "call_local", "unreliable_ordered")
+func rpc_projectile_hit(id: int, pos: Vector3, hit_id: int) -> void:
+	projectiles.on_hit(id, pos, hit_id)
+
+
+@rpc("authority", "call_remote", "reliable")
+func rpc_recoil(dyaw: float, dpitch: float) -> void:
+	if local_player != null and is_instance_valid(local_player):
+		local_player.apply_recoil(dyaw, dpitch)
+
+
+@rpc("authority", "call_local", "unreliable")
+func rpc_muzzle(shooter_id: int, weapon: String) -> void:
+	var p = players.get(shooter_id)
+	var pitch_by := {"rifle": 1.0, "shotgun": 0.6, "sniper": 0.45, "mg": 1.15}
+	if p != null and is_instance_valid(p):
+		if p.is_local():
+			p.kick_view()
+			Sfx.play("shot", -5.0, float(pitch_by.get(weapon, 1.0)) * randf_range(0.98, 1.02))
+		else:
+			Sfx.play("shot", -16.0, float(pitch_by.get(weapon, 1.0)) * randf_range(0.95, 1.05))
+		fx.emit("muzzle", shooter_id, p.eye_position() + p.aim_dir() * 0.8)
 
 
 @rpc("authority", "call_local", "reliable")

@@ -61,6 +61,15 @@ func _on_fx(kind: String, _id: int, pos: Vector3) -> void:
 			_spark(pos + Vector3(0, 1.2, 0), Palette.MINT, 0.3, 0.6)
 		"echo_shot":
 			_spark(pos, Palette.VERMILION, 0.15, 0.25)
+		"muzzle":
+			var sh = Game.players.get(_id)
+			if sh == null or not is_instance_valid(sh) or not sh.is_local():
+				_spark(pos, Palette.BRASS, 0.06, 0.3)
+		"impact_player":
+			_spark(pos, Palette.VERMILION, 0.2, 0.4)
+		"switch":
+			if _id == Game.local_id():
+				Sfx.play("reload", -10.0, 1.4)
 		"restore":
 			_spark(pos + Vector3(0, 1.0, 0), Palette.MINT, 0.5, 1.6)
 		"impact":

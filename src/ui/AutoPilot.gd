@@ -99,6 +99,14 @@ func _run(step: PackedStringArray, p: Player) -> Dictionary:
 			p.yaw = yaw
 			p.pitch = pitch
 			done = _step_t > 0.3
+		"slot":
+			var n := int(step[1]) if step.size() > 1 else 1
+			b |= [Player.BTN_SLOT1, Player.BTN_SLOT2, Player.BTN_SLOT3, Player.BTN_SLOT4][clampi(n - 1, 0, 3)]
+			done = true
+		"hold_fire":
+			pitch = p.pitch
+			b |= Player.BTN_FIRE
+			done = _step_t > (float(step[1]) if step.size() > 1 else 1.0)
 		"echo", "ability":
 			b |= Player.BTN_ECHO
 			done = _step_t > 0.2
