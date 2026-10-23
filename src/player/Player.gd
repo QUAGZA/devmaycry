@@ -79,6 +79,10 @@ var interact_held := false
 var carrying_core := false
 var frozen := false
 var zip_t := 0.0
+var ladder_t := 0.0                 # > 0 while inside a ladder volume (set by Features.Ladder)
+var ladder_out := Vector3.FORWARD
+var ladder_top := 0.0
+const CLIMB_SPEED := 4.2
 var launch_t := 0.0
 var rewind_t := 0.0
 var rewind_total := 6.0
@@ -453,6 +457,9 @@ func server_step(delta: float) -> void:
 	if rewind_t > 0.0:
 		_step_rewind(delta, pressed)
 		return
+	if ladder_t > 0.0 and not carrying_core:
+		_step_ladder(delta, pressed)
+		return
 	var staggered := stagger_t > 0.0
 	crouching = (inp_buttons & BTN_CROUCH) != 0
 	head.position.y = lerpf(head.position.y, CROUCH_HEIGHT if crouching else STAND_HEIGHT, 12.0 * delta)
@@ -507,6 +514,36 @@ func server_step(delta: float) -> void:
 	recorder.push(_now(), global_position, yaw, pitch)
 	if Game.map_def != null and global_position.y < Game.map_def.kill_y and Game.match_server != null:
 		Game.match_server.on_out_of_bounds(self)
+
+
+## Ladder climbing: forward (toward the wall) climbs, backward descends, sideways shuffles, jump
+## pushes off. Near the top the climber is pushed over the lip onto the platform. Carrying the Core
+## disables climbing (two hands on the Core), which keeps carrier routes on stairs and ramps.
+func _step_ladder(delta: float, pressed: int) -> void:
+	ladder_t -= delta
+	var wish := Basis(Vector3.UP, yaw) * Vector3(inp_move.x, 0.0, inp_move.y)
+	var toward := wish.dot(-ladder_out)
+	if (pressed & BTN_JUMP) != 0:
+		velocity = ladder_out * 5.0 + Vector3.UP * 3.5
+		ladder_t = 0.0
+		move_and_slide()
+		return
+	if toward > 0.25:
+		velocity.y = CLIMB_SPEED
+	elif toward < -0.25:
+		velocity.y = -CLIMB_SPEED
+	else:
+		velocity.y = 0.0
+	var side := wish - (-ladder_out) * toward
+	velocity.x = side.x * 2.0
+	velocity.z = side.z * 2.0
+	if global_position.y > ladder_top - 0.15 and toward > 0.25:
+		velocity += -ladder_out * 3.5
+		velocity.y = maxf(velocity.y, 1.5)
+	move_and_slide()
+	_weapon_logic(pressed, false)
+	interact_held = (inp_buttons & BTN_INTERACT) != 0
+	recorder.push(_now(), global_position, yaw, pitch)
 
 
 ## Classic stair stepping: if the horizontal move is blocked, try the same move from up to

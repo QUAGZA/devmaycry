@@ -94,8 +94,10 @@ var _perf_worst := 0.0
 
 ## --perf: uncapped frame rate, logs average FPS, worst frame, draw calls and objects every 5 s.
 func _perf(delta: float) -> void:
-	if _perf_t == 0.0 and _perf_frames == 0:
+	# re-assert every frame: Settings.apply_graphics() at match start restores the player's cap/VSync
+	if Engine.max_fps != 0:
 		Engine.max_fps = 0
+	if DisplayServer.window_get_vsync_mode() != DisplayServer.VSYNC_DISABLED:
 		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	_perf_t += delta
 	_perf_frames += 1
@@ -103,7 +105,8 @@ func _perf(delta: float) -> void:
 	if _perf_t >= 5.0:
 		log_ev("Perf", "sample", {"map": map_id, "fps": snappedf(_perf_frames / _perf_t, 0.1), "worst_ms": snappedf(_perf_worst * 1000.0, 0.1),
 			"draw_calls": Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME), "objects": Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME),
-			"vram_mb": snappedf(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0, 1), "players": players.size(), "projectiles": projectiles.live.size() if projectiles != null else 0})
+			"vram_mb": snappedf(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0, 1), "players": players.size(), "projectiles": projectiles.live.size() if projectiles != null else 0,
+			"vsync": DisplayServer.window_get_vsync_mode(), "nodes": Performance.get_monitor(Performance.OBJECT_NODE_COUNT), "orphans": Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT), "audio_latency": snappedf(Performance.get_monitor(Performance.AUDIO_OUTPUT_LATENCY) * 1000.0, 0.1), "process_ms": snappedf(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0, 0.01), "physics_ms": snappedf(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0, 0.01), "nav_ms": snappedf(Performance.get_monitor(Performance.TIME_NAVIGATION_PROCESS) * 1000.0, 0.01) if Performance.has_method("get_monitor") else 0.0})
 		_perf_t = 0.0
 		_perf_frames = 0
 		_perf_worst = 0.0

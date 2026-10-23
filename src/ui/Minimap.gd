@@ -81,9 +81,19 @@ func _draw() -> void:
 	while gz <= ext2.y:
 		draw_line(xf * (Vector2(-ext2.x, gz) - origin), xf * (Vector2(ext2.x, gz) - origin), grid_col, 1.0)
 		gz += step
-	# arena boundary
+	# arena boundary: authored floor polygons (real topology) or the legacy rectangle
 	draw_set_transform_matrix(xf)
-	draw_rect(Rect2(-ext2 - origin, ext2 * 2.0), Color(Palette.STONE, 0.5), false, 2.0 / scale)
+	if not def.floor_polys.is_empty():
+		for fp in def.floor_polys:
+			var pts: PackedVector2Array = fp["pts"]
+			var shifted := PackedVector2Array()
+			for q in pts:
+				shifted.append(q - origin)
+			var fy: float = fp["y"]
+			var shade := Color(Palette.PORCELAIN, 0.10) if absf(fy) < 0.3 else (Color(Palette.MINT, 0.16) if fy > 0.0 else Color(Palette.COBALT, 0.22))
+			draw_colored_polygon(shifted, shade)
+	else:
+		draw_rect(Rect2(-ext2 - origin, ext2 * 2.0), Color(Palette.STONE, 0.5), false, 2.0 / scale)
 	draw_set_transform_matrix(Transform2D())
 	# geometry footprints
 	for f in def.footprints:

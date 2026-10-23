@@ -6,7 +6,7 @@ extends MapDef
 
 func _init() -> void:
 	family = "tideline"
-	id = "tideline_exchange"
+	id = "legacy_tideline"
 	display_name = "TIDELINE EXCHANGE"
 	mechanic = "ZIPLINES"
 	blurb = "Suspended maritime archive with a high route, a low route and cable crossings."

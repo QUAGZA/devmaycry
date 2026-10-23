@@ -26,6 +26,9 @@ var nav: NavigationRegion3D = null
 var geometry: Node3D = null
 var features: Node3D = null
 var _mats: Dictionary = {}
+var floor_polys: Array = []       # [{pts: PackedVector2Array, y}] authored floor topology for the minimap
+var ladders: Array = []           # [{base, top_y, out}]
+var dev_map := false              # true for the developer test arena
 var family := "oracle"             # material family for Style.kind_for (oracle / tideline / foundry)
 
 

@@ -5,8 +5,9 @@ extends MapDef
 
 
 func _init() -> void:
-	id = "oracle_gardens"
-	display_name = "ORACLE GARDENS"
+	id = "dev_test_arena"
+	display_name = "DEVELOPER TEST ARENA"
+	dev_map = true
 	mechanic = "PHASE GATES"
 	blurb = "Three lanes around a monumental plaza. Paired gates fold the flanks together."
 	kill_y = -10.0

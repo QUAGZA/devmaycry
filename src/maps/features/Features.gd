@@ -390,3 +390,47 @@ class VectorSling extends Area3D:
 			cooldown = COOLDOWN
 			Game.rpc_fx.rpc("sling", p.id, p.global_position)
 			Game.log_ev("Feature", "sling", {"id": p.id, "sling": sling_name})
+
+
+
+## LADDER: climbable strip on a wall face. Players inside the volume climb by moving toward the wall
+## (forward), descend by moving away, and jump off with jump. Server-authoritative: the area only
+## flags the player (ladder_t / ladder_out / ladder_top); Player.server_step does the movement.
+class Ladder extends Area3D:
+	var out := Vector3.FORWARD
+	var top_y := 4.0
+	var base := Vector3.ZERO
+
+	func setup(base_: Vector3, top_y_: float, out_: Vector3, lname: String) -> void:
+		base = base_
+		top_y = top_y_
+		out = out_
+		position = base_
+		collision_layer = 16
+		collision_mask = 2
+		var h := top_y - base.y + 1.2
+		var cs := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = Vector3(1.4, h, 1.3)
+		cs.shape = bs
+		cs.position = Vector3(0, h * 0.5, 0) + out * 0.45
+		cs.rotation.y = atan2(out.x, out.z)
+		add_child(cs)
+		var steel := Style.surface("metal", Color("4A505A"))
+		var hazard := Style.surface("ceramic", Color("D99A2B"))
+		var side := Vector3(out.z, 0, -out.x)
+		for sx in [-0.42, 0.42]:
+			MapDecor.strut(self, side * sx + out * 0.12, side * sx + out * 0.12 + Vector3(0, top_y - base.y + 1.0, 0), 0.04, steel)
+		var rungs := int((top_y - base.y) / 0.35)
+		for i in rungs:
+			var y := 0.3 + i * 0.35
+			MapDecor.strut(self, side * -0.42 + out * 0.12 + Vector3(0, y, 0), side * 0.42 + out * 0.12 + Vector3(0, y, 0), 0.025, hazard if i % 4 == 0 else steel)
+		add_child(Features.label("LADDER %s" % lname, Vector3(0, top_y - base.y + 1.6, 0) + out * 0.3, Palette.BRASS, 36))
+
+	func _physics_process(_delta: float) -> void:
+		if not multiplayer.is_server():
+			return
+		for p in Features.players_in(self):
+			p.ladder_t = 0.15
+			p.ladder_out = out
+			p.ladder_top = top_y
