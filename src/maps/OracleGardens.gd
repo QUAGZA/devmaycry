@@ -13,7 +13,7 @@ func _init() -> void:
 
 
 func _build_layout() -> void:
-	var chalk := mat(Palette.CHALK, 0.95)
+	var chalk := mat(Color("B9AE95"), 0.95)
 	var porcelain := mat(Palette.PORCELAIN, 0.8)
 	var mint := mat(Palette.MINT_DARK, 0.7, 0.15)
 	var stone := mat(Palette.STONE, 0.92)
@@ -22,7 +22,7 @@ func _build_layout() -> void:
 	var vermilion_glow := mat(Palette.VERMILION, 0.5, 0.0, Palette.VERMILION, 2.5)
 	var cobalt_glow := mat(Palette.COBALT, 0.5, 0.0, Palette.COBALT, 2.0)
 	var pool := mat(Color("5F8FA8"), 0.1, 0.2)
-	light_env(Vector3(-0.45, -0.8, 0.35), Color("FFF2DC"), Color("DCE7F2"), Color("F1E8D8"), Color("8C8578"), Color("E9E2D2"), 0.003)
+	light_env(Vector3(-0.45, -0.8, 0.35), Color("FFE9CC"), Color("B9C9DA"), Color("E6DCC8"), Color("6E685C"), Color("D9D0BE"), 0.0015)
 
 	# Floor plates (140 x 100) and perimeter
 	box(Vector3(0, -0.5, 0), Vector3(140, 1, 100), chalk, "Floor")
@@ -69,8 +69,8 @@ func _build_layout() -> void:
 	# Mineral pools (visual only, walkable low rims)
 	for p in [Vector3(-28, 0.05, 30), Vector3(28, 0.05, -30)]:
 		decal(p, Vector2(10, 7), pool)
-		box(p + Vector3(0, 0.25, 0), Vector3(11, 0.5, 0.6), stone)
-		box(p + Vector3(0, 0.25, 0), Vector3(0.6, 0.5, 8), stone)
+		box(p + Vector3(0, 0.15, 0), Vector3(11, 0.3, 0.6), stone)
+		box(p + Vector3(0, 0.15, 0), Vector3(0.6, 0.3, 8), stone)
 
 	# North lane (z>0): staggered walls and planters forming a curved flank
 	for i in 7:

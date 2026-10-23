@@ -20,7 +20,6 @@ var _spawn_counter := 0
 func setup(mode_id: String, mapdef: MapDef) -> void:
 	mode = mode_id
 	def = mapdef
-	def.bake_nav()
 	var path := "res://src/rules/CorebreakMode.gd" if mode == "corebreak" else "res://src/rules/RelicRushMode.gd"
 	if ResourceLoader.exists(path):
 		rules = load(path).new(self)
@@ -61,7 +60,7 @@ func respawn_point(p: Player) -> Dictionary:
 	var best_d := -1.0
 	for c in candidates:
 		var dmin := 1e9
-		for other in Game.players.values():
+		for other: Player in Game.players.values():
 			if not is_instance_valid(other) or other == p or not other.alive:
 				continue
 			if p.team != 0 and other.team == p.team:
@@ -79,6 +78,7 @@ func step(delta: float) -> void:
 	match_time += delta
 	if rules != null:
 		rules.step(delta)
+		time_left = rules.time_left
 	else:
 		time_left = maxf(0.0, time_left - delta)
 	for id in _respawn.keys():
@@ -178,6 +178,12 @@ func request_echo(p: Player) -> void:
 func clear_echoes(reason: String) -> void:
 	for eid in Game.echoes.keys():
 		Game.rpc_echo_end.rpc(eid, reason)
+
+
+func live_dict() -> Dictionary:
+	if rules != null and rules.has_method("live_dict"):
+		return rules.live_dict()
+	return {}
 
 
 func push_state() -> void:

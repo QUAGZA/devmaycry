@@ -55,6 +55,10 @@ func _on_fx(kind: String, _id: int, pos: Vector3) -> void:
 			_spark(pos + Vector3(0, 1.0, 0), Palette.MINT, 0.5, 1.2)
 		"echo_hit":
 			_spark(pos + Vector3(0, 1.2, 0), Palette.VERMILION, 0.3, 0.5)
+		"echo_damaged":
+			_spark(pos + Vector3(0, 1.2, 0), Palette.MINT, 0.3, 0.6)
+		"echo_shot":
+			_spark(pos, Palette.VERMILION, 0.15, 0.25)
 
 
 func _on_damage(victim_id: int, _attacker_id: int, _amount: float, _hp_after: float, _cause: String) -> void:

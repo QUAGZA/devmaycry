@@ -194,6 +194,7 @@ func fill_bots() -> void:
 		return
 	remove_all_bots()
 	if not lobby["bot_fill"]:
+		ensure_playable()
 		return
 	var diff: String = lobby["bot_difficulty"]
 	if lobby["mode"] == "corebreak":
@@ -206,6 +207,20 @@ func fill_bots() -> void:
 		var total := int(lobby["ffa_size"])
 		while players.size() < total and players.size() < MAX_PLAYERS:
 			add_bot(0, diff)
+	_assign_glyphs()
+	broadcast_players()
+
+
+func ensure_playable() -> void:
+	if not is_server():
+		return
+	var diff: String = lobby["bot_difficulty"]
+	if lobby["mode"] == "corebreak":
+		for team in [1, 2]:
+			if team_count(team) == 0:
+				add_bot(team, diff)
+	elif players.size() < 2:
+		add_bot(0, diff)
 	_assign_glyphs()
 	broadcast_players()
 

@@ -24,6 +24,8 @@ var players: Dictionary = {}
 var local_player: Player = null
 var state: Dictionary = {}
 var results: Dictionary = {}
+var live: Dictionary = {}
+var spectating := ""
 var time_left := 0.0
 var server_tick := 0
 var in_match := false
@@ -96,6 +98,7 @@ func host_start_match() -> void:
 	Net.lobby["locked"] = true
 	Net.broadcast_lobby()
 	Net.fill_bots()
+	Net.ensure_playable()
 	mode_id = str(Net.lobby["mode"])
 	map_id = str(Net.lobby["map"])
 	_map_ready.clear()
@@ -124,6 +127,8 @@ func _clear_match_nodes() -> void:
 	world = null
 	map_def = null
 	state = {}
+	live = {}
+	spectating = ""
 	if match_server != null:
 		match_server.queue_free()
 		match_server = null
@@ -347,13 +352,15 @@ func _send_snapshot() -> void:
 		if is_instance_valid(p):
 			data.append(p.pack_state())
 	time_left = match_server.time_left if match_server != null else 0.0
-	rpc_snapshot.rpc(server_tick, data, time_left)
+	live = match_server.live_dict() if match_server != null else {}
+	rpc_snapshot.rpc(server_tick, data, time_left, live)
 
 
 # ---------------------------------------------------------------- RPCs: inputs & snapshots
 @rpc("authority", "call_remote", "unreliable_ordered")
-func rpc_snapshot(_tick: int, data: Array, tl: float) -> void:
+func rpc_snapshot(_tick: int, data: Array, tl: float, live_: Dictionary) -> void:
 	time_left = tl
+	live = live_
 	for s in data:
 		var p = players.get(s[0])
 		if p != null and is_instance_valid(p):

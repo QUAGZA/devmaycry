@@ -81,6 +81,8 @@ func _build() -> void:
 	timer_card.add_child(timer_lbl)
 	mode_lbl = UiTheme.stamp("COREBREAK / ROUND 1", Palette.PORCELAIN, 14)
 	mode_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mode_lbl.add_theme_color_override("font_outline_color", Palette.INK)
+	mode_lbl.add_theme_constant_override("outline_size", 5)
 	top.add_child(mode_lbl)
 
 	# Top left: score card
@@ -480,13 +482,18 @@ func _process(delta: float) -> void:
 		dead_lbl.visible = not p.alive
 		if p.alive:
 			dead_lbl.text = ""
+		elif Game.spectating != "":
+			dead_lbl.text = "ELIMINATED / SPECTATING %s" % Game.spectating
 		var hint := ""
+		var core_live: Dictionary = Game.live.get("core", {})
+		if str(core_live.get("mode", "")) == "planted":
+			hint = "CORE PLANTED AT SITE %s / DETONATION IN %d" % [str(core_live.get("site", "")), int(ceil(float(core_live.get("detonate", 0.0))))]
 		if p.stagger_t > 0.0:
 			hint = "STAGGERED"
 		elif p.carrying_core:
 			hint = "CARRYING THE RESONANCE CORE / hold E inside a site to plant"
 		hint_lbl.text = hint
-		var prog: Dictionary = Game.state.get("interaction", {})
+		var prog: Dictionary = Game.live.get("interaction", {})
 		if not prog.is_empty() and int(prog.get("player", 0)) == p.id:
 			progress_box.visible = true
 			progress_lbl.text = str(prog.get("label", ""))

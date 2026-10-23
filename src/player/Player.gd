@@ -29,6 +29,7 @@ const FIRE_COOLDOWN := 0.17
 const RELOAD_TIME := 1.4
 const WEAPON_RANGE := 120.0
 const STAND_HEIGHT := 1.6
+const STEP_HEIGHT := 0.55
 const CROUCH_HEIGHT := 1.05
 const MASK_SHOT := 1 | 2 | 4
 const F_ALIVE := 1
@@ -81,6 +82,7 @@ var _net_pitch := 0.0
 var _net_t := 0.0
 var _net_dt := 1.0 / 30.0
 var _view_kick := 0.0
+var _floor_t := 0.0
 var flags := F_ALIVE
 
 var head: Node3D
@@ -138,7 +140,7 @@ func _init() -> void:
 	head.add_child(cam)
 	viewmodel = Node3D.new()
 	viewmodel.name = "Viewmodel"
-	viewmodel.position = Vector3(0.3, -0.24, -0.45)
+	viewmodel.position = Vector3(0.34, -0.27, -0.62)
 	viewmodel.visible = false
 	cam.add_child(viewmodel)
 	_build_viewmodel()
@@ -153,31 +155,31 @@ func _init() -> void:
 
 func _build_viewmodel() -> void:
 	vm_mat = StandardMaterial3D.new()
-	vm_mat.albedo_color = Palette.PORCELAIN
-	vm_mat.roughness = 0.4
-	vm_mat.metallic = 0.2
+	vm_mat.albedo_color = Palette.INK
+	vm_mat.roughness = 0.35
+	vm_mat.metallic = 0.5
 	var body := MeshInstance3D.new()
 	var bm := BoxMesh.new()
-	bm.size = Vector3(0.09, 0.11, 0.52)
+	bm.size = Vector3(0.06, 0.08, 0.34)
 	body.mesh = bm
 	body.material_override = vm_mat
 	viewmodel.add_child(body)
 	var grip := MeshInstance3D.new()
 	var gm := BoxMesh.new()
-	gm.size = Vector3(0.07, 0.16, 0.09)
+	gm.size = Vector3(0.05, 0.12, 0.07)
 	grip.mesh = gm
-	grip.position = Vector3(0, -0.12, 0.12)
+	grip.position = Vector3(0, -0.09, 0.08)
 	var gmat := StandardMaterial3D.new()
-	gmat.albedo_color = Palette.INK
+	gmat.albedo_color = Palette.PORCELAIN
 	grip.material_override = gmat
 	viewmodel.add_child(grip)
 	var ring := MeshInstance3D.new()
 	var rm := TorusMesh.new()
-	rm.inner_radius = 0.05
-	rm.outer_radius = 0.085
+	rm.inner_radius = 0.028
+	rm.outer_radius = 0.05
 	ring.mesh = rm
 	ring.rotation_degrees = Vector3(90, 0, 0)
-	ring.position = Vector3(0, 0, -0.3)
+	ring.position = Vector3(0, 0, -0.2)
 	var rmat := StandardMaterial3D.new()
 	rmat.albedo_color = Palette.MINT
 	rmat.emission_enabled = true
@@ -325,6 +327,7 @@ func server_step(delta: float) -> void:
 	else:
 		velocity.x = move_toward(velocity.x, target.x, accel * delta)
 		velocity.z = move_toward(velocity.z, target.z, accel * delta)
+	_step_up(delta)
 	move_and_slide()
 	if reload_t > 0.0:
 		pass
@@ -341,6 +344,39 @@ func server_step(delta: float) -> void:
 	recorder.push(_now(), global_position, yaw, pitch)
 	if Game.map_def != null and global_position.y < Game.map_def.kill_y and Game.match_server != null:
 		Game.match_server.on_out_of_bounds(self)
+
+
+## Classic stair stepping: if the horizontal move is blocked, try the same move from up to
+## STEP_HEIGHT higher and settle back onto the ledge.
+func _step_up(delta: float) -> void:
+	if is_on_floor():
+		_floor_t = 0.0
+	else:
+		_floor_t += delta
+		if _floor_t > 0.3 or velocity.y > 1.0:
+			return
+	var horiz := Vector3(velocity.x, 0.0, velocity.z)
+	if horiz.length() < 0.5:
+		return
+	var motion := horiz * delta + horiz.normalized() * 0.05
+	if not test_move(global_transform, motion):
+		return
+	var up := Vector3.UP * STEP_HEIGHT
+	if test_move(global_transform, up):
+		return
+	var raised := global_transform.translated(up)
+	if test_move(raised, motion):
+		return
+	var params := PhysicsTestMotionParameters3D.new()
+	params.from = raised.translated(motion)
+	params.motion = -up
+	var res := PhysicsTestMotionResult3D.new()
+	if PhysicsServer3D.body_test_motion(get_rid(), params, res):
+		var step_h := STEP_HEIGHT - res.get_travel().length()
+		if step_h > 0.02 and step_h <= STEP_HEIGHT:
+			global_position.y += step_h + 0.02
+			if velocity.y < 0.0:
+				velocity.y = 0.0
 
 
 func _now() -> float:
@@ -382,9 +418,11 @@ func _shoot() -> void:
 		if col is Player:
 			hit_id = col.id
 			col.apply_damage(DAMAGE, id, "pulse", 0.0)
-		elif col != null and col.has_method("hit_by_shot"):
-			col.hit_by_shot(id)
-			hit_id = -9999
+		elif col != null:
+			var echo = col if col.has_method("hit_by_shot") else col.get_parent()
+			if echo != null and echo.has_method("hit_by_shot"):
+				echo.hit_by_shot(id)
+				hit_id = -9999
 	recorder.push_event(_now(), EchoBuffer.EVT_FIRE, yaw, pitch)
 	Game.rpc_shot.rpc(id, from, hit_pos, hit_id)
 
@@ -528,7 +566,7 @@ func _apply_flags_visual() -> void:
 func _process(delta: float) -> void:
 	_view_kick = lerpf(_view_kick, 0.0, 14.0 * delta)
 	if viewmodel.visible:
-		viewmodel.position = Vector3(0.3, -0.24 - _view_kick * 0.02, -0.45 + _view_kick * 0.08)
+		viewmodel.position = Vector3(0.34, -0.27 - _view_kick * 0.02, -0.62 + _view_kick * 0.08)
 		viewmodel.rotation.x = _view_kick * 0.12
 	if multiplayer.is_server():
 		if _local:

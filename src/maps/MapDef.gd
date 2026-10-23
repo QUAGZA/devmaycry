@@ -48,7 +48,7 @@ func bake_nav() -> void:
 	var nm := NavigationMesh.new()
 	nm.agent_radius = 0.6
 	nm.agent_height = 2.0
-	nm.agent_max_climb = 0.75
+	nm.agent_max_climb = 0.5
 	nm.agent_max_slope = 50.0
 	nm.cell_size = 0.3
 	nm.cell_height = 0.25
@@ -175,7 +175,7 @@ func light_env(sun_dir: Vector3, sun_color: Color, sky_top: Color, sky_horizon: 
 	var sun := DirectionalLight3D.new()
 	sun.name = "Sun"
 	sun.light_color = sun_color
-	sun.light_energy = 1.15
+	sun.light_energy = 1.0
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 160.0
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
@@ -196,10 +196,10 @@ func light_env(sun_dir: Vector3, sun_color: Color, sky_top: Color, sky_horizon: 
 	sky.sky_material = skm
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_sky_contribution = 0.9
-	env.ambient_light_energy = 1.0
+	env.ambient_light_sky_contribution = 0.45
+	env.ambient_light_energy = 0.55
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.0
+	env.tonemap_exposure = 0.78
 	env.glow_enabled = true
 	env.glow_intensity = 0.35
 	env.glow_bloom = 0.05
@@ -207,7 +207,7 @@ func light_env(sun_dir: Vector3, sun_color: Color, sky_top: Color, sky_horizon: 
 	env.fog_enabled = true
 	env.fog_light_color = fog_color
 	env.fog_density = fog_density
-	env.fog_sky_affect = 0.25
+	env.fog_sky_affect = 0.1
 	we.environment = env
 	root.add_child(we)
 
