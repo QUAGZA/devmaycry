@@ -152,7 +152,7 @@ func _draw() -> void:
 	for tp in def.temporal_props:
 		if is_instance_valid(tp):
 			var sp := xf * (Vector2(tp.global_position.x, tp.global_position.z) - origin)
-			var c := Palette.PORCELAIN if tp.state == "intact" else (Palette.COBALT if tp.state == "restored" else Color(Palette.STONE, 0.4))
+			var c := Palette.PORCELAIN if tp.state == "intact" or tp.state == "damaged" else (Palette.COBALT if tp.state.begins_with("restored") else Color(Palette.STONE, 0.4))
 			draw_rect(Rect2(sp - Vector2(3, 3), Vector2(6, 6)), c)
 	# core
 	var core: Dictionary = live.get("core", {})

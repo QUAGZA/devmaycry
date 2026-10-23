@@ -19,7 +19,8 @@ var color := Palette.PORCELAIN
 var mesh: MeshInstance3D
 var shape: CollisionShape3D
 var fragments: Array = []
-var mat: StandardMaterial3D
+var mat: Material
+var damaged_mat: Material
 var temporal_mat: StandardMaterial3D
 var _anim_t := 0.0
 var _anim_dir := 0
@@ -44,9 +45,9 @@ func setup(id: int, pos: Vector3, size_: Vector3, yaw_deg: float, color_: Color)
 	var bm := BoxMesh.new()
 	bm.size = size
 	mesh.mesh = bm
-	mat = StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.roughness = 0.6
+	# intact: glazed ceramic in the map palette; damaged: darker with signal-orange fault glow
+	mat = Style.surface("ceramic", color)
+	damaged_mat = Style.surface("ceramic", color.darkened(0.3), Color("E2683A"), 0.45)
 	mesh.material_override = mat
 	add_child(mesh)
 	temporal_mat = StandardMaterial3D.new()
@@ -88,10 +89,14 @@ func hit_by_shot(_shooter_id: int) -> void:
 
 
 func apply_damage(amount: float) -> void:
-	if not multiplayer.is_server() or state != "intact":
+	if not multiplayer.is_server() or (state != "intact" and state != "damaged"):
 		return
 	hp -= amount
 	Game.rpc_fx.rpc("impact", prop_id, global_position)
+	if hp > 0.0 and hp <= HP_MAX * 0.5 and state == "intact":
+		version += 1
+		Game.rpc_prop_state.rpc(prop_id, "damaged", version, 0.0)
+		Game.log_ev("Prop", "damaged", {"id": prop_id, "hp": hp, "version": version})
 	if hp <= 0.0:
 		destroy()
 
@@ -110,14 +115,30 @@ func restore_temporal(now: float) -> bool:
 	if not multiplayer.is_server() or state != "destroyed":
 		return false
 	version += 1
-	Game.rpc_prop_state.rpc(prop_id, "restored", version, now + COVER_SECONDS)
-	Game.log_ev("Prop", "restored", {"id": prop_id, "mt": snappedf(now, 0.01), "version": version, "until": snappedf(now + COVER_SECONDS, 0.01)})
+	# Safety rule: never restore collision through a living player. If anyone stands inside the
+	# footprint, the prop returns visually (same transition) but without collision for this cover window.
+	var blocker := _player_inside()
+	var st := "restored_ghost" if blocker != 0 else "restored"
+	Game.rpc_prop_state.rpc(prop_id, st, version, now + COVER_SECONDS)
+	Game.log_ev("Prop", "restored", {"id": prop_id, "mt": snappedf(now, 0.01), "version": version, "until": snappedf(now + COVER_SECONDS, 0.01), "collision": blocker == 0, "blocked_by": blocker})
 	return true
+
+
+## Id of a living, non-rewinding player whose body overlaps the prop footprint, or 0.
+func _player_inside() -> int:
+	var inv := global_transform.affine_inverse()
+	for p: Player in Game.players.values():
+		if not is_instance_valid(p) or not p.alive or p.rewind_t > 0.0:
+			continue
+		var l: Vector3 = inv * (p.global_position + Vector3(0, 0.9, 0))
+		if absf(l.x) < size.x * 0.5 + 0.45 and absf(l.z) < size.z * 0.5 + 0.45 and absf(l.y) < size.y * 0.5 + 1.0:
+			return p.id
+	return 0
 
 
 func _physics_process(delta: float) -> void:
 	_animate(delta)
-	if not multiplayer.is_server() or state != "restored":
+	if not multiplayer.is_server() or not state.begins_with("restored"):
 		return
 	var now: float = Game.match_server.match_time if Game.match_server != null else 0.0
 	if now >= restored_until:
@@ -142,6 +163,10 @@ func apply_state(new_state: String, new_version: int, t: float) -> void:
 	var old := state
 	state = new_state
 	match state:
+		"damaged":
+			collision_layer = 1
+			mesh.visible = true
+			mesh.material_override = damaged_mat
 		"intact":
 			hp = HP_MAX
 			destroyed_at = -1.0
@@ -153,7 +178,7 @@ func apply_state(new_state: String, new_version: int, t: float) -> void:
 				f["node"].position = f["home"]
 			_anim_dir = 0
 		"destroyed":
-			if old == "intact":
+			if old == "intact" or old == "damaged":
 				destroyed_at = t
 			collision_layer = 0
 			mesh.visible = false
@@ -162,9 +187,9 @@ func apply_state(new_state: String, new_version: int, t: float) -> void:
 			_anim_dir = 1
 			_anim_t = 0.0 if old != "restored" else 0.0
 			Sfx.play("elim", -12.0, 1.4)
-		"restored":
+		"restored", "restored_ghost":
 			restored_until = t
-			collision_layer = TEMPORAL_LAYER
+			collision_layer = TEMPORAL_LAYER if state == "restored" else 0
 			mesh.visible = true
 			mesh.material_override = temporal_mat
 			for f in fragments:
@@ -190,5 +215,5 @@ func _animate(delta: float) -> void:
 				f["node"].visible = false
 			mesh.scale = Vector3.ONE * 1.04
 		_anim_dir = 0
-	if state == "restored":
+	if state.begins_with("restored"):
 		mesh.scale = mesh.scale.lerp(Vector3.ONE, 6.0 * delta)

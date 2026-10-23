@@ -52,6 +52,9 @@ func _run(step: PackedStringArray, p: Player) -> Dictionary:
 			done = _step_t >= float(step[1]) if step.size() > 1 else true
 		"forward":
 			move = Vector2(0, -1)
+		"walk":
+			move = Vector2(0, -1)
+			done = _step_t >= (float(step[1]) if step.size() > 1 else 1.0)
 		"sprint":
 			move = Vector2(0, -1)
 			b |= Player.BTN_SPRINT
