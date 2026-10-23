@@ -289,6 +289,7 @@ func _reverse_entropy(p: Player) -> void:
 	p.start_rewind(ms.match_time, HotReturnRules.REWIND_SECONDS)
 	Game.rpc_fx.rpc("rewind_start", p.id, p.global_position)
 	Game.log_ev("Ability", "reverse_entropy", {"id": p.id, "t": ms.match_time})
+	Game.projectiles.retrieve_for(p)
 	ms.push_state()
 
 

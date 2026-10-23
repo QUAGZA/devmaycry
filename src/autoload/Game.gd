@@ -593,6 +593,11 @@ func rpc_projectile_accel(id: int, factor: float) -> void:
 	projectiles.on_accel(id, factor)
 
 
+@rpc("authority", "call_local", "reliable")
+func rpc_shot_retrieve(owner_id: int, pts: PackedVector3Array, dur: float) -> void:
+	projectiles.on_retrieve(owner_id, pts, dur)
+
+
 @rpc("authority", "call_local", "unreliable_ordered")
 func rpc_projectile_hit(id: int, pos: Vector3, hit_id: int) -> void:
 	projectiles.on_hit(id, pos, hit_id)

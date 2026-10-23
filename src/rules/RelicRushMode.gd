@@ -74,6 +74,7 @@ func request_ability(p: Player) -> void:
 	p.start_rewind(ms.match_time, HotReturnRules.REWIND_SECONDS)
 	Game.rpc_fx.rpc("rewind_start", p.id, p.global_position)
 	Game.log_ev("Ability", "reverse_entropy", {"id": p.id, "mode": "relic_rush"})
+	Game.projectiles.retrieve_for(p)
 
 
 func role_of(_team: int) -> String:
