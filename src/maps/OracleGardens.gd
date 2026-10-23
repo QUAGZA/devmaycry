@@ -27,7 +27,12 @@ func _build_layout() -> void:
 	# Floor plates (140 x 100) and perimeter
 	box(Vector3(0, -0.5, 0), Vector3(160, 1, 100), Style.surface("floor", Color("D3C6A8")), "Floor")
 	for z in [-50.5, 50.5]:
-		box(Vector3(0, 2.5, z), Vector3(162, 5, 1), stone, "", false)
+		var gap_x := -14.0 if z > 0 else 14.0
+		var left_len := (gap_x - 5.0) - (-81.0)
+		var right_len := 81.0 - (gap_x + 5.0)
+		box(Vector3(-81.0 + left_len * 0.5, 2.5, z), Vector3(left_len, 5, 1), stone, "", false)
+		box(Vector3(81.0 - right_len * 0.5, 2.5, z), Vector3(right_len, 5, 1), stone, "", false)
+		_alcove(Vector3(gap_x, 0, z), 1.0 if z > 0 else -1.0, stone)
 	for x in [-80.5, 80.5]:
 		box(Vector3(x, 2.5, 0), Vector3(1, 5, 102), stone, "", false)
 	# Floor plate seams (decor)
@@ -169,8 +174,12 @@ func _art_pass() -> void:
 	# Perimeter: buttressed retaining walls with broken crowns; corner bastions break the rectangle.
 	for x in range(-72, 73, 12):
 		for zs in [-1.0, 1.0]:
+			var gx := -14.0 if zs > 0 else 14.0
+			if absf(x - gx) < 7.0:
+				continue
 			box(Vector3(x, 2.6, zs * 49.4), Vector3(1.6, 5.2, 1.2), sand, "", false)
-			MapDecor._mesh(deco, MapDecor._boxm(Vector3(9.0, 0.6 + absf(sin(x * 0.37)) * 1.6, 1.4)), Vector3(x + 6.0, 5.3, zs * 50.5), ivory)
+			if absf(x + 6.0 - gx) > 10.0:
+				MapDecor._mesh(deco, MapDecor._boxm(Vector3(9.0, 0.6 + absf(sin(x * 0.37)) * 1.6, 1.4)), Vector3(x + 6.0, 5.3, zs * 50.5), ivory)
 	for z in range(-36, 37, 12):
 		if absf(z) < 20:
 			continue
@@ -242,6 +251,32 @@ func _art_pass() -> void:
 	for g in [[Vector3(-40, 0, 44), 0.0], [Vector3(40, 0, -44), 0.0], [Vector3(-40, 0, -44), 0.0], [Vector3(40, 0, 44), 0.0]]:
 		MapDecor.arch(deco, g[0], g[1], 6.4, 5.6, ivory, glaze)
 	MapDecor.dress_boxes(self)
+
+
+## Semicircular garden alcove beyond a perimeter opening: walkable floor, curved stone wall,
+## a reflecting basin, a statue and planting. Concealed flank pocket, off every Hot Return route.
+func _alcove(mouth: Vector3, outward: float, wall_mat: Material) -> void:
+	var r := 9.0
+	var floor_body := box(mouth + Vector3(0, -0.5, outward * (r * 0.5 + 0.25)), Vector3(r * 2.0 + 2.0, 1.0, r + 2.5), Style.surface("floor", Color("B4A486")), "", true)
+	footprints.pop_back()
+	floor_body.name = "AlcoveFloor"
+	var segs := 9
+	for i in segs + 1:
+		var a := PI * float(i) / float(segs)
+		var p := mouth + Vector3(cos(a) * r, 2.5, outward * sin(a) * r)
+		var w := box(p, Vector3(1.0, 5.0, 3.4), wall_mat, "", false)
+		w.rotation.y = -atan2(outward * sin(a), cos(a))
+	var basin := StandardMaterial3D.new()
+	basin.albedo_color = Color("3F6E86")
+	basin.roughness = 0.04
+	basin.metallic = 0.4
+	decal(mouth + Vector3(0, 0.03, outward * 5.5), Vector2(5.0, 3.0), basin)
+	box(mouth + Vector3(0, 0.15, outward * 5.5), Vector3(5.6, 0.3, 0.4), Style.surface("stone", Color("E4D8BE")))
+	MapDecor.place(features, MapDecor.NATURE + "statue_head.glb", mouth + Vector3(0, 0, outward * 7.6), 2.4, 0.0 if outward > 0 else 180.0, "stone", Color(0.92, 0.88, 0.8))
+	MapDecor.place(features, MapDecor.NATURE + "tree_oak.glb", mouth + Vector3(-5.5, 0, outward * 5.0), 5.5, 30.0, "foliage", Color(0.5, 0.66, 0.46))
+	MapDecor.place(features, MapDecor.NATURE + "tree_default.glb", mouth + Vector3(5.5, 0, outward * 5.0), 5.0, 70.0, "foliage", Color(0.5, 0.66, 0.46))
+	# low planter as cover at the mouth so the pocket cannot be swept from the lane in one look
+	box(mouth + Vector3(2.5, 0.55, outward * 1.6), Vector3(3.2, 1.1, 1.0), Style.surface("ceramic", Color("2F6B66")))
 
 
 func _build_site(site_id: String, center: Vector3, glow: Material, floor_mat: Material, wall_mat: Material) -> void:

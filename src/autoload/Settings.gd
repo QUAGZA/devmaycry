@@ -27,7 +27,7 @@ var last_window_note := ""
 ## Window and per-feature graphics options. A preset writes all four; each can then be overridden.
 var window_mode := "windowed"        # windowed / borderless / fullscreen
 var shadow_quality := "high"         # low / medium / high
-var aa_mode := "msaa4"               # off / fxaa / msaa2 / msaa4 / taa
+var aa_mode := "fxaa"                # off / fxaa / msaa2 / msaa4 / taa (MSAA shows edge dots with the toon shader, see docs)
 var texture_quality := "high"        # low (no detail maps) / high (Poly Haven detail maps)
 var effects_quality := "high"        # low (no ink, SSAO, glow, fog) / medium / high (halftone)
 const WINDOW_MODES := ["windowed", "borderless", "fullscreen"]
@@ -226,12 +226,12 @@ func set_preset(p: String) -> void:
 			effects_quality = "low"
 		"medium":
 			shadow_quality = "medium"
-			aa_mode = "msaa2"
+			aa_mode = "fxaa"
 			texture_quality = "high"
 			effects_quality = "medium"
 		_:
 			shadow_quality = "high"
-			aa_mode = "msaa4"
+			aa_mode = "fxaa"
 			texture_quality = "high"
 			effects_quality = "high"
 

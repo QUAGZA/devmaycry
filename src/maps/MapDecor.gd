@@ -249,3 +249,40 @@ static func piles(parent: Node3D, from: Vector3, to: Vector3, count: int, depth:
 	for i in count:
 		var p := from.lerp(to, float(i) / maxf(1.0, float(count - 1)))
 		strut(parent, p, p - Vector3(0, depth, 0), 0.55, mat)
+
+
+
+## Perimeter wall along X at depth z, split around openings [[centre_x, width], ...].
+static func split_wall_x(def: MapDef, z: float, half_len: float, h: float, gaps: Array, mat: Material) -> void:
+	var cuts: Array = []
+	for g in gaps:
+		cuts.append([float(g[0]) - float(g[1]) * 0.5, float(g[0]) + float(g[1]) * 0.5])
+	cuts.sort_custom(func(a, b) -> bool: return a[0] < b[0])
+	var start := -half_len
+	for c in cuts + [[half_len, half_len]]:
+		var seg_len := float(c[0]) - start
+		if seg_len > 0.05:
+			def.box(Vector3(start + seg_len * 0.5, h * 0.5, z), Vector3(seg_len, h, 1), mat, "", false)
+		start = float(c[1])
+
+
+## Semicircular walkable lobe beyond a perimeter opening (floor overlaps the main floor by 1 m).
+static func lobe(def: MapDef, mouth: Vector3, outward: float, r: float, floor_mat: Material, wall_mat: Material, wall_h: float) -> void:
+	def.box(mouth + Vector3(0, -0.5, outward * (r * 0.5 + 0.25)), Vector3(r * 2.0 + 2.0, 1.0, r + 2.5), floor_mat, "", true)
+	def.footprints.pop_back()
+	var segs := 9
+	for i in segs + 1:
+		var a := PI * float(i) / float(segs)
+		var w := def.box(mouth + Vector3(cos(a) * r, wall_h * 0.5, outward * sin(a) * r), Vector3(1.0, wall_h, r * 0.38), wall_mat, "", false)
+		w.rotation.y = -atan2(outward * sin(a), cos(a))
+
+
+## Rectangular pier projecting through a perimeter opening over the sea, with low rails.
+static func pier(def: MapDef, mouth: Vector3, outward: float, width: float, length: float, deck_mat: Material, rail_mat: Material) -> void:
+	def.box(mouth + Vector3(0, -0.5, outward * (length * 0.5 - 0.5)), Vector3(width, 1.0, length + 1.0), deck_mat, "", true)
+	def.footprints.pop_back()
+	for sx in [-1.0, 1.0]:
+		def.box(mouth + Vector3(sx * (width * 0.5 - 0.15), 0.55, outward * (length * 0.5 + 0.5)), Vector3(0.3, 1.1, length - 1.0), rail_mat, "", false)
+	def.box(mouth + Vector3(0, 0.55, outward * (length - 0.15)), Vector3(width, 1.1, 0.3), rail_mat, "", false)
+	for k in 3:
+		strut(def.features, mouth + Vector3(-width * 0.5 + 0.6 + k * (width - 1.2) * 0.5, -0.9, outward * (length - 0.8)), mouth + Vector3(-width * 0.5 + 0.6 + k * (width - 1.2) * 0.5, -10.0, outward * (length - 0.8)), 0.45, rail_mat)

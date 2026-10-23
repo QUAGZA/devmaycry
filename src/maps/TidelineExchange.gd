@@ -32,7 +32,12 @@ func _build_layout() -> void:
 	# Main deck 120 x 90 with water channels carved as decals
 	box(Vector3(0, -0.5, 0), Vector3(150, 1, 90), Style.surface("concrete", Color("8F8A80")), "Deck")
 	for z in [-45.5, 45.5]:
-		box(Vector3(0, 3.0, z), Vector3(152, 6, 1), indigo, "", false)
+		var px := 12.0 if z > 0 else -12.0
+		MapDecor.split_wall_x(self, z, 76.0, 6.0, [[px, 9.0]], indigo)
+		MapDecor.pier(self, Vector3(px, 0, z), 1.0 if z > 0 else -1.0, 9.0, 15.0, Style.surface("rust", Color("6E5A4A")), Style.surface("ceramic", Color("C8622F")))
+		# cargo cover on the pier: two staggered crates
+		box(Vector3(px - 2.0, 0.75, z + (1.0 if z > 0 else -1.0) * 6.0), Vector3(2.4, 1.5, 2.0), canvas)
+		box(Vector3(px + 2.2, 0.6, z + (1.0 if z > 0 else -1.0) * 10.5), Vector3(2.0, 1.2, 2.0), brass)
 	for x in [-75.5, 75.5]:
 		box(Vector3(x, 3.0, 0), Vector3(1, 6, 92), indigo, "", false)
 	for z in [-18.0, 0.0, 18.0]:

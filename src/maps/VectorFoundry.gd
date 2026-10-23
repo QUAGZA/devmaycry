@@ -25,7 +25,13 @@ func _build_layout() -> void:
 
 	box(Vector3(0, -0.5, 0), Vector3(150, 1, 100), Style.surface("concrete", Color("A39079")), "Floor")
 	for z in [-50.5, 50.5]:
-		box(Vector3(0, 4.0, z), Vector3(152, 8, 1), terracotta, "", false)
+		var lx := -8.0 if z > 0 else 8.0
+		var out := 1.0 if z > 0 else -1.0
+		MapDecor.split_wall_x(self, z, 76.0, 8.0, [[lx, 10.0]], terracotta)
+		MapDecor.lobe(self, Vector3(lx, 0, z), out, 9.0, Style.surface("metal", Color("5A6068")), terracotta, 8.0)
+		# kinetic press in the lobe: a solid housing (cover) under a hanging piston
+		cylinder(Vector3(lx, 0.8, z + out * 5.5), 1.6, 1.6, Style.surface("metal", Color("4A505A")))
+		box(Vector3(lx + 4.0, 0.7, z + out * 3.0), Vector3(2.4, 1.4, 1.4), Style.surface("plaster", Color("34436E")))
 	for x in [-75.5, 75.5]:
 		box(Vector3(x, 4.0, 0), Vector3(1, 8, 102), terracotta, "", false)
 	# floor markings: concentric rings and vectors
