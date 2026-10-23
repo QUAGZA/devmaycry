@@ -26,6 +26,7 @@ var nav: NavigationRegion3D = null
 var geometry: Node3D = null
 var features: Node3D = null
 var _mats: Dictionary = {}
+var family := "oracle"             # material family for Style.kind_for (oracle / tideline / foundry)
 
 
 func build(target: Node3D) -> void:
@@ -72,14 +73,7 @@ func mat(color: Color, rough: float = 0.9, metal: float = 0.0, emissive: Color =
 	if _mats.has(key):
 		return _mats[key]
 	if emissive == Color.BLACK:
-		var sm := ShaderMaterial.new()
-		sm.shader = load("res://src/shaders/surface.gdshader")
-		sm.set_shader_parameter("albedo", color)
-		sm.set_shader_parameter("accent", color.darkened(0.22).lerp(Palette.COBALT_DARK, 0.08))
-		sm.set_shader_parameter("roughness", rough)
-		sm.set_shader_parameter("metallic", metal)
-		sm.set_shader_parameter("tile", 0.3)
-		sm.set_shader_parameter("wear", 0.55)
+		var sm := Style.surface(Style.kind_for(family, color, rough, metal), color)
 		_mats[key] = sm
 		return sm
 	var m := StandardMaterial3D.new()

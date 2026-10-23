@@ -97,6 +97,7 @@ func _ready() -> void:
 	_cam.fov = 42.0
 	add_child(_cam)
 	_cam.current = true
+	Style.add_outline(_cam)
 
 
 func _process(delta: float) -> void:

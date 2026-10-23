@@ -314,6 +314,7 @@ func setup(id_: int, info: Dictionary) -> void:
 func make_local() -> void:
 	_local = true
 	cam.current = true
+	Style.add_outline(cam)
 	body_mesh.visible = false
 	rig.visible = false
 	tag.visible = false

@@ -5,6 +5,7 @@ extends MapDef
 
 
 func _init() -> void:
+	family = "foundry"
 	id = "vector_foundry"
 	display_name = "VECTOR FOUNDRY"
 	mechanic = "VECTOR SLINGS"

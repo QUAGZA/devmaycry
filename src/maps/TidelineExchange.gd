@@ -5,6 +5,7 @@ extends MapDef
 
 
 func _init() -> void:
+	family = "tideline"
 	id = "tideline_exchange"
 	display_name = "TIDELINE EXCHANGE"
 	mechanic = "ZIPLINES"

@@ -3,3 +3,6 @@
 /android/
 build/
 *.log
+
+# raw downloaded asset packs: kept locally, not redistributed (see ASSET_REGISTER.md)
+assets/_source/

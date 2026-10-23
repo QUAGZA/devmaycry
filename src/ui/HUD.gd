@@ -12,6 +12,7 @@ var hp_lbl: Label
 var hp_bar: ColorRect
 var hp_bar_bg: Control
 var ammo_lbl: Label
+var reserve_lbl: Label
 var ammo_state_lbl: Label
 var dash_card: Dictionary
 var echo_card: Dictionary
@@ -171,15 +172,21 @@ func _build() -> void:
 	root.add_child(feed_box)
 
 	# Bottom left: health
+	var bl_card := PanelContainer.new()
+	bl_card.add_theme_stylebox_override("panel", UiTheme.card(Color(Palette.INK, 0.72), Color(Palette.STONE, 0.6), 1, 2, 12))
+	root.add_child(bl_card)
+	_pin(bl_card, Control.PRESET_BOTTOM_LEFT, 28)
 	var bl := VBoxContainer.new()
-	bl.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	bl.position = Vector2(24, -118)
-	bl.size = Vector2(300, 100)
-	root.add_child(bl)
+	bl.add_theme_constant_override("separation", 2)
+	bl_card.add_child(bl)
+	var hp_row := HBoxContainer.new()
+	hp_row.add_theme_constant_override("separation", 10)
+	bl.add_child(hp_row)
+	hp_lbl = UiTheme.label("100", 44, Palette.PORCELAIN, mono)
+	hp_row.add_child(hp_lbl)
 	var hp_stamp := UiTheme.stamp("INTEGRITY", Palette.MINT, 13)
-	bl.add_child(hp_stamp)
-	hp_lbl = UiTheme.label("100", 56, Palette.PORCELAIN, mono)
-	bl.add_child(hp_lbl)
+	hp_stamp.size_flags_vertical = Control.SIZE_SHRINK_END
+	hp_row.add_child(hp_stamp)
 	hp_bar_bg = Control.new()
 	hp_bar_bg.custom_minimum_size = Vector2(260, 8)
 	bl.add_child(hp_bar_bg)
@@ -197,25 +204,34 @@ func _build() -> void:
 
 	# Bottom right: ammo + abilities
 	var br := HBoxContainer.new()
-	br.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	br.position = Vector2(-430, -118)
-	br.size = Vector2(406, 100)
 	br.alignment = BoxContainer.ALIGNMENT_END
-	br.add_theme_constant_override("separation", 12)
+	br.add_theme_constant_override("separation", 10)
 	root.add_child(br)
+	_pin(br, Control.PRESET_BOTTOM_RIGHT, 28)
 	dash_card = _ability_card("CTRL", "DASH")
 	br.add_child(dash_card["root"])
 	echo_card = _ability_card("Q", "ECHO")
 	br.add_child(echo_card["root"])
+	var ammo_card := PanelContainer.new()
+	ammo_card.add_theme_stylebox_override("panel", UiTheme.card(Color(Palette.INK, 0.72), Color(Palette.STONE, 0.6), 1, 2, 12))
+	ammo_card.custom_minimum_size = Vector2(210, 84)
+	br.add_child(ammo_card)
 	var ammo_box := VBoxContainer.new()
 	ammo_box.alignment = BoxContainer.ALIGNMENT_END
-	br.add_child(ammo_box)
-	ammo_state_lbl = UiTheme.stamp("PULSE CASTER", Palette.MINT, 13)
+	ammo_box.add_theme_constant_override("separation", 0)
+	ammo_card.add_child(ammo_box)
+	ammo_state_lbl = UiTheme.stamp("RIFLE", Palette.MINT, 13)
 	ammo_state_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	ammo_box.add_child(ammo_state_lbl)
-	ammo_lbl = UiTheme.label("08", 56, Palette.PORCELAIN, mono)
-	ammo_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	ammo_box.add_child(ammo_lbl)
+	var ammo_row := HBoxContainer.new()
+	ammo_row.alignment = BoxContainer.ALIGNMENT_END
+	ammo_row.add_theme_constant_override("separation", 6)
+	ammo_box.add_child(ammo_row)
+	ammo_lbl = UiTheme.label("30", 44, Palette.PORCELAIN, mono)
+	ammo_row.add_child(ammo_lbl)
+	reserve_lbl = UiTheme.label("/ 090", 20, Color(Palette.PORCELAIN, 0.6), mono)
+	reserve_lbl.size_flags_vertical = Control.SIZE_SHRINK_END
+	ammo_row.add_child(reserve_lbl)
 
 	# Centre: crosshair, notices, interaction progress
 	crosshair = Control.new()
@@ -225,11 +241,11 @@ func _build() -> void:
 	root.add_child(crosshair)
 	var centre := VBoxContainer.new()
 	centre.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	centre.position = Vector2(-400, 190)
+	centre.position = Vector2(-400, 168)
 	centre.size = Vector2(800, 120)
 	centre.alignment = BoxContainer.ALIGNMENT_BEGIN
 	root.add_child(centre)
-	notice_lbl = UiTheme.label("", 40, Palette.PORCELAIN, disp)
+	notice_lbl = UiTheme.label("", 30, Palette.PORCELAIN, disp)
 	notice_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	notice_lbl.add_theme_color_override("font_outline_color", Palette.INK)
 	notice_lbl.add_theme_constant_override("outline_size", 6)
@@ -284,9 +300,19 @@ func _build() -> void:
 	fullmap_panel.add_child(fullmap)
 
 
+## Anchors a control to a screen corner with a fixed margin so it grows inward from that corner
+## and can never run past the display edge whatever its content width.
+func _pin(c: Control, preset: Control.LayoutPreset, margin: float) -> void:
+	c.set_anchors_and_offsets_preset(preset, Control.PRESET_MODE_MINSIZE, int(margin))
+	if preset == Control.PRESET_BOTTOM_RIGHT or preset == Control.PRESET_TOP_RIGHT:
+		c.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	if preset == Control.PRESET_BOTTOM_RIGHT or preset == Control.PRESET_BOTTOM_LEFT:
+		c.grow_vertical = Control.GROW_DIRECTION_BEGIN
+
+
 func _ability_card(key: String, label: String) -> Dictionary:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(92, 84)
+	panel.custom_minimum_size = Vector2(88, 84)
 	panel.add_theme_stylebox_override("panel", UiTheme.card(Color(Palette.INK, 0.82), Palette.STONE, 1, 2, 8))
 	var fill := ColorRect.new()
 	fill.color = Color(Palette.MINT, 0.35)
@@ -294,7 +320,7 @@ func _ability_card(key: String, label: String) -> Dictionary:
 	panel.add_child(fill)
 	var v := VBoxContainer.new()
 	panel.add_child(v)
-	var k := UiTheme.label(key, 26, Palette.PORCELAIN, UiTheme.mono_font())
+	var k := UiTheme.label(key, 22, Palette.PORCELAIN, UiTheme.mono_font())
 	k.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(k)
 	var n := UiTheme.stamp(label, Palette.MINT, 13)
@@ -567,7 +593,8 @@ func _process(delta: float) -> void:
 		hp_lbl.text = "%03d" % int(ceil(p.hp))
 		hp_bar.size.x = 260.0 * clampf(p.hp / Player.MAX_HP, 0.0, 1.0)
 		hp_bar.color = Palette.MINT if p.hp > 50 else (Palette.BRASS if p.hp > 25 else Palette.VERMILION)
-		ammo_lbl.text = "%02d / %03d" % [p.ammo, p.reserve]
+		ammo_lbl.text = "%02d" % p.ammo
+		reserve_lbl.text = "/ %03d" % p.reserve
 		var wname := str(Weapons.get_data(p.weapon_id)["name"])
 		if p.reload_t > 0.0:
 			ammo_state_lbl.text = "%s / RELOADING %0.1f" % [wname, p.reload_t]

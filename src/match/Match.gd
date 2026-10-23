@@ -49,6 +49,7 @@ func _process(_delta: float) -> void:
 		spec_cam.fov = 86.0
 		spec_cam.near = 0.05
 		$World.add_child(spec_cam)
+		Style.add_outline(spec_cam)
 	spec_cam.global_position = target.eye_position()
 	spec_cam.global_rotation = Vector3(target.head.rotation.x, target.rotation.y, 0.0)
 	if not spec_cam.current:
