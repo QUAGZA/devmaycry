@@ -217,9 +217,9 @@ func _screen_setup(practice: bool) -> void:
 	_header("MODE / ROOM SETUP", "OFFLINE PRACTICE" if practice else "HOST LAN ROOM", "Choose the record to play. Bots fill the vacant seats." if practice else "Your room gets a 6-character code that other players on this Wi-Fi can join.")
 	var lobby := Net.lobby
 	_line("YOUR NAME", "PLAYER", Settings.player_name).text_changed.connect(func(t: String) -> void: Settings.player_name = t.strip_edges().to_upper().left(14))
-	var modes := ["COREBREAK / ATTACK vs DEFEND", "RELIC RUSH / FREE FOR ALL"]
-	_option("MODE", modes, 0 if lobby["mode"] == "corebreak" else 1, func(i: int) -> void:
-		Net.lobby["mode"] = "corebreak" if i == 0 else "relic_rush")
+	var modes := ["HOT RETURN / STEAL THE CORE", "RELIC RUSH / FREE FOR ALL"]
+	_option("MODE", modes, 0 if lobby["mode"] == "hot_return" else 1, func(i: int) -> void:
+		Net.lobby["mode"] = "hot_return" if i == 0 else "relic_rush")
 	var map_names := []
 	var map_ids := []
 	var cur := 0
@@ -233,12 +233,12 @@ func _screen_setup(practice: bool) -> void:
 	_option("MAP", map_names, cur, func(i: int) -> void: Net.lobby["map"] = map_ids[i])
 	for m in Maps.list():
 		column.add_child(UiTheme.label("%s: %s" % [m["name"], m["blurb"]], 13, Palette.STONE, UiTheme.serif_font()))
-	_option("TEAM SIZE (COREBREAK)", ["1 v 1", "2 v 2", "3 v 3", "4 v 4"], int(lobby["team_size"]) - 1, func(i: int) -> void: Net.lobby["team_size"] = i + 1)
+	_option("TEAM SIZE (HOT RETURN)", ["1 v 1", "2 v 2", "3 v 3", "4 v 4"], int(lobby["team_size"]) - 1, func(i: int) -> void: Net.lobby["team_size"] = i + 1)
 	_option("PLAYERS (RELIC RUSH)", ["2", "4", "6", "8"], clampi(int(lobby["ffa_size"]) / 2 - 1, 0, 3), func(i: int) -> void: Net.lobby["ffa_size"] = (i + 1) * 2)
 	_check("FILL WITH BOTS", bool(lobby["bot_fill"]), func(v: bool) -> void: Net.lobby["bot_fill"] = v)
 	_option("BOT DIFFICULTY", ["EASY", "MEDIUM", "HARD"], Net.DIFFICULTIES.find(str(lobby["bot_difficulty"])), func(i: int) -> void: Net.lobby["bot_difficulty"] = Net.DIFFICULTIES[i])
 	column.add_child(UiTheme.rule(Palette.STONE))
-	column.add_child(UiTheme.label("Corebreak: attackers plant the Resonance Core at A or B; defenders stop them or defuse. First to 3 rounds. Relic Rush: 5 minutes, first to 25 points.", 14, Palette.STONE, UiTheme.serif_font()))
+	column.add_child(UiTheme.label("Hot Return: attackers steal the Causal Core from the vault and carry it home before it detonates (26 s fuse, Stability Fields pause it). First to 3 rounds, 2-2 goes to overtime pairs. Relic Rush: 5 minutes, first to 25 points.", 14, Palette.STONE, UiTheme.serif_font()))
 	_button("CREATE ROOM" if not practice else "OPEN PRACTICE LOBBY", func() -> void:
 		Settings.save_prefs()
 		var err := Net.host(Net.PORT, practice)
@@ -301,7 +301,7 @@ func _screen_lobby() -> void:
 	column.add_child(UiTheme.rule(Palette.STONE))
 	if host:
 		var lobby := Net.lobby
-		_option("MODE", ["COREBREAK", "RELIC RUSH"], 0 if lobby["mode"] == "corebreak" else 1, func(i: int) -> void: Net.set_lobby("mode", "corebreak" if i == 0 else "relic_rush"))
+		_option("MODE", ["HOT RETURN", "RELIC RUSH"], 0 if lobby["mode"] == "hot_return" else 1, func(i: int) -> void: Net.set_lobby("mode", "hot_return" if i == 0 else "relic_rush"))
 		var map_names := []
 		var map_ids := []
 		var cur := 0
@@ -345,14 +345,14 @@ func _on_players_changed() -> void:
 	for c in _lobby_roster.get_children():
 		c.queue_free()
 	var l := Net.lobby
-	var mode_txt := "COREBREAK %dv%d" % [int(l["team_size"]), int(l["team_size"])] if l["mode"] == "corebreak" else "RELIC RUSH / %d PLAYERS" % int(l["ffa_size"])
+	var mode_txt := "HOT RETURN %dv%d" % [int(l["team_size"]), int(l["team_size"])] if l["mode"] != "relic_rush" else "RELIC RUSH / %d PLAYERS" % int(l["ffa_size"])
 	if _lobby_summary != null:
 		_lobby_summary.text = "%s  ·  %s  ·  BOTS %s (%s)" % [mode_txt, Maps.info(str(l["map"]))["name"], "ON" if l["bot_fill"] else "OFF", str(l["bot_difficulty"]).to_upper()]
 	var ids := Net.players.keys()
 	ids.sort()
 	for id in ids:
 		var info: Dictionary = Net.players[id]
-		var row := UiTheme.label("%s  %-14s  %-10s  %s%s" % [Palette.glyph(int(info["glyph"])), str(info["name"]), Palette.team_name(int(info["team"])) if l["mode"] == "corebreak" else "SOLO", "BOT" if info["is_bot"] else "HUMAN", "  (HOST)" if id == 1 else ""], 16, Palette.player_color(info), UiTheme.mono_font())
+		var row := UiTheme.label("%s  %-14s  %-10s  %s%s" % [Palette.glyph(int(info["glyph"])), str(info["name"]), Palette.team_name(int(info["team"])) if l["mode"] != "relic_rush" else "SOLO", "BOT" if info["is_bot"] else "HUMAN", "  (HOST)" if id == 1 else ""], 16, Palette.player_color(info), UiTheme.mono_font())
 		_lobby_roster.add_child(row)
 	_lobby_roster.add_child(UiTheme.label("%d human(s) connected. Bots are added when the match starts." % Net.human_count(), 13, Palette.STONE, UiTheme.serif_font()))
 

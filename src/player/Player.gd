@@ -31,7 +31,8 @@ const WEAPON_RANGE := 120.0
 const STAND_HEIGHT := 1.6
 const STEP_HEIGHT := 0.55
 const CROUCH_HEIGHT := 1.05
-const MASK_SHOT := 1 | 2 | 4
+const MASK_SHOT := 1 | 2 | 4 | 32
+const TEMPORAL_LAYER := 32
 const F_ALIVE := 1
 const F_CROUCH := 2
 const F_SPRINT := 4
@@ -41,6 +42,11 @@ const F_FLOOR := 32
 const F_PROTECT := 64
 const F_STAGGER := 128
 const F_ZIP := 256
+const F_RE_SPENT := 512
+const F_FF_SPENT := 1024
+const F_REWIND := 2048
+const F_FF := 4096
+const CARRY_SPEED := 4.2
 
 var id := 0
 var pname := ""
@@ -68,6 +74,13 @@ var carrying_core := false
 var frozen := false
 var zip_t := 0.0
 var launch_t := 0.0
+var rewind_t := 0.0
+var rewind_total := 6.0
+var rewind_start := 0.0
+var body_yaw := 0.0
+var re_spent := false
+var ff_spent := false
+var ff_until := 0.0
 var last_attacker := 0
 var inp_move := Vector2.ZERO
 var inp_buttons := 0
@@ -84,6 +97,7 @@ var _net_t := 0.0
 var _net_dt := 1.0 / 30.0
 var _view_kick := 0.0
 var _floor_t := 0.0
+var _spectated := false
 var flags := F_ALIVE
 
 var head: Node3D
@@ -98,7 +112,7 @@ var vm_mat: StandardMaterial3D
 
 func _init() -> void:
 	collision_layer = 2
-	collision_mask = 1 | 2
+	collision_mask = 1 | 2 | TEMPORAL_LAYER
 	floor_max_angle = deg_to_rad(50.0)
 	shape = CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
@@ -217,6 +231,12 @@ func is_local() -> bool:
 	return _local
 
 
+## While a dead teammate looks through this player's eyes, hide its own model and tag.
+func set_spectated(on: bool) -> void:
+	_spectated = on
+	_apply_flags_visual()
+
+
 func aim_dir() -> Vector3:
 	return -(Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, pitch)).z
 
@@ -230,8 +250,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not _local or Game.paused_local:
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		yaw -= event.relative.x * Settings.mouse_sensitivity
-		pitch = clampf(pitch - event.relative.y * Settings.mouse_sensitivity, -1.45, 1.45)
+		var sens := Settings.mouse_sensitivity * (Player.ff_sens_mult() if ff_until > 0.0 else 1.0)
+		yaw -= event.relative.x * sens
+		pitch = clampf(pitch - event.relative.y * sens, -1.45, 1.45)
 		yaw = wrapf(yaw, -PI, PI)
 
 
@@ -289,6 +310,9 @@ func server_step(delta: float) -> void:
 		return
 	if zip_t > 0.0:
 		return
+	if rewind_t > 0.0:
+		_step_rewind(delta, pressed)
+		return
 	var staggered := stagger_t > 0.0
 	crouching = (inp_buttons & BTN_CROUCH) != 0
 	head.position.y = lerpf(head.position.y, CROUCH_HEIGHT if crouching else STAND_HEIGHT, 12.0 * delta)
@@ -302,7 +326,8 @@ func server_step(delta: float) -> void:
 	if staggered:
 		speed *= 0.45
 	if carrying_core:
-		speed *= 0.9
+		speed = CARRY_SPEED
+		sprinting = false
 	var wish := Vector3(inp_move.x, 0.0, inp_move.y)
 	if wish.length() > 1.0:
 		wish = wish.normalized()
@@ -345,7 +370,7 @@ func server_step(delta: float) -> void:
 			_start_reload()
 	interact_held = (inp_buttons & BTN_INTERACT) != 0
 	if (pressed & BTN_ECHO) != 0 and Game.match_server != null:
-		Game.match_server.request_echo(self)
+		Game.match_server.request_ability(self)
 	recorder.push(_now(), global_position, yaw, pitch)
 	if Game.map_def != null and global_position.y < Game.map_def.kill_y and Game.match_server != null:
 		Game.match_server.on_out_of_bounds(self)
@@ -382,6 +407,51 @@ func _step_up(delta: float) -> void:
 			global_position.y += step_h + 0.02
 			if velocity.y < 0.0:
 				velocity.y = 0.0
+
+
+## Reverse Entropy: the body re-traverses its recorded route backwards; look and fire stay free.
+func start_rewind(now: float, seconds: float) -> void:
+	rewind_total = seconds
+	rewind_t = seconds
+	rewind_start = now
+	velocity = Vector3.ZERO
+	dash_t = 0.0
+	interact_held = false
+	collision_mask = 1 | 2
+
+
+func _step_rewind(delta: float, pressed: int) -> void:
+	var elapsed := rewind_total - rewind_t
+	var target_t := rewind_start - elapsed
+	var s := recorder.sample_abs(target_t)
+	global_position = s["pos"]
+	body_yaw = s["yaw"]
+	velocity = Vector3.ZERO
+	rewind_t = maxf(0.0, rewind_t - delta)
+	if Game.match_server != null:
+		Game.match_server.on_rewind_pass(self, target_t)
+	if reload_t > 0.0:
+		pass
+	elif (pressed & BTN_RELOAD) != 0 and ammo < MAG_SIZE:
+		_start_reload()
+	elif (pressed & BTN_FIRE) != 0 and fire_cd <= 0.0:
+		if ammo > 0:
+			_shoot()
+		else:
+			_start_reload()
+	if rewind_t <= 0.0:
+		collision_mask = 1 | 2 | TEMPORAL_LAYER
+		_settle_after_rewind()
+		if Game.match_server != null:
+			Game.log_ev("Ability", "rewind_done", {"id": id, "pos": [snappedf(global_position.x, 0.1), snappedf(global_position.y, 0.1), snappedf(global_position.z, 0.1)]})
+
+
+## If the historical point now intersects geometry, nudge upward so the body is never stuck.
+func _settle_after_rewind() -> void:
+	for i in 8:
+		if not test_move(global_transform, Vector3(0, 0.01, 0)):
+			return
+		global_position.y += 0.3
 
 
 func _now() -> float:
@@ -468,10 +538,12 @@ func _die(killer_id: int, cause: String) -> void:
 	hp = 0.0
 	velocity = Vector3.ZERO
 	collision_layer = 0
+	collision_mask = 1 | 2 | TEMPORAL_LAYER
 	carrying_core = false
 	interact_held = false
 	zip_t = 0.0
 	launch_t = 0.0
+	rewind_t = 0.0
 	recorder.clear()
 	if Game.match_server != null:
 		Game.match_server.on_player_died(self, killer_id, cause)
@@ -490,6 +562,7 @@ func respawn(pos: Vector3, yaw_: float, protect: float) -> void:
 	spawn_protect_t = protect
 	frozen = false
 	carrying_core = false
+	rewind_t = 0.0
 	collision_layer = 2
 	velocity = Vector3.ZERO
 	global_position = pos
@@ -534,6 +607,14 @@ func pack_state() -> Array:
 		f |= F_STAGGER
 	if zip_t > 0.0:
 		f |= F_ZIP
+	if re_spent:
+		f |= F_RE_SPENT
+	if ff_spent:
+		f |= F_FF_SPENT
+	if rewind_t > 0.0:
+		f |= F_REWIND
+	if ff_until > 0.0 and Game.match_server != null and Game.match_server.match_time < ff_until:
+		f |= F_FF
 	flags = f
 	return [id, global_position, yaw, pitch, hp, ammo, f, reload_t, dash_cd, echo_cd, stagger_t, spawn_protect_t, velocity]
 
@@ -558,6 +639,10 @@ func apply_state(s: Array) -> void:
 	alive = (flags & F_ALIVE) != 0
 	crouching = (flags & F_CROUCH) != 0
 	carrying_core = (flags & F_CARRY) != 0
+	re_spent = (flags & F_RE_SPENT) != 0
+	ff_spent = (flags & F_FF_SPENT) != 0
+	rewind_t = 1.0 if (flags & F_REWIND) != 0 else 0.0
+	ff_until = 1.0 if (flags & F_FF) != 0 else 0.0
 	if (old_flags & F_ALIVE) != (flags & F_ALIVE):
 		_apply_flags_visual()
 	if _net_prev.distance_to(_net_pos) > 6.0:
@@ -566,8 +651,8 @@ func apply_state(s: Array) -> void:
 
 
 func _apply_flags_visual() -> void:
-	body_mesh.visible = alive and not _local
-	tag.visible = alive and not _local
+	body_mesh.visible = alive and not _local and not _spectated
+	tag.visible = alive and not _local and not _spectated
 	shape.disabled = not alive
 
 
@@ -594,3 +679,7 @@ func _process(delta: float) -> void:
 
 func kick_view() -> void:
 	_view_kick = 1.0
+
+
+static func ff_sens_mult() -> float:
+	return 1.15

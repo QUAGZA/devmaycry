@@ -14,7 +14,7 @@ const BEACON_PORT := 24643
 const MAX_PLAYERS := 8
 const CODE_CHARS := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 const DIFFICULTIES := ["easy", "medium", "hard"]
-const MODES := ["corebreak", "relic_rush"]
+const MODES := ["hot_return", "relic_rush"]
 
 var peer: ENetMultiplayerPeer = null
 var is_host := false
@@ -23,7 +23,7 @@ var room_code := ""
 var port := PORT
 var players: Dictionary = {}
 var lobby: Dictionary = {
-	"mode": "corebreak",
+	"mode": "hot_return",
 	"map": "oracle_gardens",
 	"team_size": 3,
 	"ffa_size": 4,
@@ -197,7 +197,7 @@ func fill_bots() -> void:
 		ensure_playable()
 		return
 	var diff: String = lobby["bot_difficulty"]
-	if lobby["mode"] == "corebreak":
+	if lobby["mode"] != "relic_rush":
 		var size := int(lobby["team_size"])
 		_balance_humans(size)
 		for team in [1, 2]:
@@ -215,7 +215,7 @@ func ensure_playable() -> void:
 	if not is_server():
 		return
 	var diff: String = lobby["bot_difficulty"]
-	if lobby["mode"] == "corebreak":
+	if lobby["mode"] != "relic_rush":
 		for team in [1, 2]:
 			if team_count(team) == 0:
 				add_bot(team, diff)
@@ -267,7 +267,7 @@ func _balance_humans(size: int) -> void:
 
 func _retarget_teams() -> void:
 	for id in players:
-		if lobby["mode"] == "corebreak":
+		if lobby["mode"] != "relic_rush":
 			if int(players[id]["team"]) == 0:
 				_auto_team(id)
 		else:
@@ -277,7 +277,7 @@ func _retarget_teams() -> void:
 
 
 func _auto_team(id: int) -> void:
-	if lobby["mode"] != "corebreak":
+	if lobby["mode"] == "relic_rush":
 		players[id]["team"] = 0
 		return
 	var c1 := team_count(1, false)

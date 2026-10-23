@@ -11,6 +11,8 @@ func _init() -> void:
 		_test_corebreak_rules()
 	if ResourceLoader.exists("res://src/rules/RelicRules.gd"):
 		_test_relic_rules()
+	if ResourceLoader.exists("res://src/rules/HotReturnRules.gd"):
+		_test_hot_return_rules()
 	print("[Tests] passed=%d failed=%d" % [_passes, _fails])
 	quit(1 if _fails > 0 else 0)
 
@@ -29,11 +31,11 @@ func _test_echo_buffer() -> void:
 	var b := EchoBuffer.new()
 	for i in 60:
 		b.push(i * 0.05, Vector3(i, 0, 0), i * 0.1, 0.0)
-	check(b.sample_count() <= 26 and b.sample_count() >= 24, "keeps about 25 samples (2.5 s at 10 Hz), got %d" % b.sample_count())
-	check(b.times[0] >= b.times[b.times.size() - 1] - 2.5 - 0.001, "oldest sample is within 2.5 s of the newest")
+	check(b.sample_count() == 30, "keeps every 10 Hz sample within the 6 s window (30 pushes), got %d" % b.sample_count())
+	check(b.times[0] >= b.times[b.times.size() - 1] - EchoBuffer.DURATION - 0.001, "oldest sample is within the window of the newest")
 	var p := b.payload()
 	check(p["t"][0] == 0.0, "payload times start at zero")
-	check(absf(p["duration"] - 2.4) < 0.11, "payload duration about 2.4 s, got %f" % p["duration"])
+	check(absf(p["duration"] - 2.9) < 0.11, "payload duration matches the recorded span, got %f" % p["duration"])
 	var mid_x: float = (p["pos"][0].x + p["pos"][1].x) * 0.5
 	var s_mid := EchoBuffer.sample_at(p, p["t"][1] * 0.5)
 	check(absf(s_mid["pos"].x - mid_x) < 0.01, "sample_at interpolates between samples")
@@ -49,6 +51,12 @@ func _test_echo_buffer() -> void:
 	short.push(0.0, Vector3.ZERO, 0, 0)
 	var sp := short.payload()
 	check(sp["t"].size() == 1 and sp["duration"] == 0.0, "single-sample history yields a valid zero-duration payload")
+	var long := EchoBuffer.new()
+	for i in 100:
+		long.push(3.0 + i * 0.1, Vector3(i, 0, 0), 0.0, 0.0)
+	check(long.has_span(5.9) and not long.has_span(6.5), "has_span reports a full 6 s history")
+	check(long.sample_abs(12.95)["pos"].x == 99.0, "sample_abs clamps to the newest sample")
+	check(absf(long.sample_abs(10.05)["pos"].x - 70.5) < 0.01, "sample_abs interpolates at an absolute time")
 
 
 func _test_corebreak_rules() -> void:
@@ -89,6 +97,38 @@ func _test_corebreak_rules() -> void:
 	R.record_round(m2, 2)
 	R.record_round(m2, 2)
 	check(m2["winner"] == 2, "sweeping an overtime pair wins the match")
+
+
+func _test_hot_return_rules() -> void:
+	print("[Tests] HotReturnRules")
+	var R = load("res://src/rules/HotReturnRules.gd")
+	check(R.resolve({"detonated": true, "stabilized": true, "attackers_alive": 0, "defenders_alive": 0, "time_left": 0.0}) == "defend:detonation", "a resolved detonation is final")
+	check(R.resolve({"detonated": false, "stabilized": true, "attackers_alive": 0, "defenders_alive": 0, "time_left": 0.0}) == "attack:stabilized", "stabilization beats eliminations and timer")
+	check(R.resolve({"detonated": false, "stabilized": false, "attackers_alive": 0, "defenders_alive": 0, "time_left": 50.0}) == "defend:eliminated", "mutual elimination -> defenders (no extraction)")
+	check(R.resolve({"detonated": false, "stabilized": false, "attackers_alive": 1, "defenders_alive": 0, "time_left": 50.0}) == "attack:eliminated", "defenders eliminated -> attackers")
+	check(R.resolve({"detonated": false, "stabilized": false, "attackers_alive": 0, "defenders_alive": 1, "time_left": 50.0}) == "defend:eliminated", "attackers eliminated -> defenders")
+	check(R.resolve({"detonated": false, "stabilized": false, "attackers_alive": 1, "defenders_alive": 1, "time_left": 0.0}) == "defend:timer", "timer expiry -> defenders")
+	check(R.resolve({"detonated": false, "stabilized": false, "attackers_alive": 1, "defenders_alive": 1, "time_left": 10.0}) == "", "live round -> no result")
+	var r = R.volatility_step(0.0, 1.0, true, false, 0.0, false)
+	check(absf(float(r["v"]) - 100.0 / 26.0) < 0.001, "one second outside a field adds 100/26 points")
+	check(absf(float(R.volatility_step(0.0, 26.0, true, false, 0.0, false)["v"]) - 100.0) < 0.001, "26 s of exposure reaches 100")
+	r = R.volatility_step(40.0, 1.0, true, true, 7.0, false)
+	check(absf(float(r["v"]) - 40.0) < 0.001 and absf(float(r["used"]) - 1.0) < 0.001, "inside a field with allowance: paused, allowance consumed")
+	r = R.volatility_step(40.0, 1.0, true, true, 0.4, false)
+	check(absf(float(r["used"]) - 0.4) < 0.001 and absf(float(r["v"]) - (40.0 + 0.6 * 100.0 / 26.0)) < 0.001, "allowance exhaustion mid-tick resumes ticking for the remainder")
+	r = R.volatility_step(40.0, 1.0, true, true, 0.0, true)
+	check(absf(float(r["v"]) - (40.0 + 100.0 / 26.0)) < 0.001, "fast-forward does not apply inside a field")
+	r = R.volatility_step(40.0, 1.0, true, false, 0.0, true)
+	check(absf(float(r["v"]) - (40.0 + 1.75 * 100.0 / 26.0)) < 0.001, "fast-forward multiplies the rate outside a field")
+	check(float(R.volatility_step(40.0, 1.0, false, false, 0.0, true)["v"]) == 40.0, "a non-ticking core never changes")
+	var hist := [[10.0, 0.0], [11.0, 3.8], [12.0, 7.7], [13.0, 7.7], [14.0, 11.5]]
+	check(absf(R.history_value(hist, 11.5) - 5.75) < 0.001, "history interpolates between samples")
+	check(R.history_value(hist, 12.5) == 7.7, "history keeps paused values flat")
+	check(R.history_value(hist, 5.0) == 0.0 and R.history_value(hist, 99.0) == 11.5, "history clamps to its range")
+	var e = R.route_exposure(128.0, 0.0)
+	check(float(e["volatility"]) >= 100.0, "a 128 m direct run without pauses detonates")
+	e = R.route_exposure(150.0, 14.0)
+	check(float(e["volatility"]) < 100.0, "a 150 m field route with 14 s of pauses survives")
 
 
 func _test_relic_rules() -> void:

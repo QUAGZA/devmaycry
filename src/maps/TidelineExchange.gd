@@ -40,6 +40,7 @@ func _build_layout() -> void:
 		spawn_point("attack", Vector3(-54, 1.0, -9 + i * 6), -90)
 		spawn_point("defend", Vector3(54, 1.0, -9 + i * 6), 90)
 	core_spawn = Vector3(-44, 0.6, 0)
+	hot_return_layout(Vector3(-44, 0, 0), Vector3(44, 0, 0), Vector3(-55, 0, 0), Vector3(55, 0, 0), Vector3(-36, 6.0, 30), Vector3(38, 0.3, -24))
 	for sx in [-1.0, 1.0]:
 		box(Vector3(sx * 47, 1.2, 0), Vector3(1.0, 2.4, 10), canvas)
 		box(Vector3(sx * 47, 1.2, 16), Vector3(1.0, 2.4, 6), canvas)
@@ -92,6 +93,14 @@ func _build_layout() -> void:
 	site_platform("B", Vector3(38, 0.3, -24), cobalt_glow, 6.0)
 	box(Vector3(31, 1.4, -17), Vector3(1.0, 2.8, 6), canvas)
 	box(Vector3(45, 1.4, -31), Vector3(1.0, 2.8, 6), canvas)
+
+	# Temporal destructibles: brittle crates and shutters
+	var crate := Color("8E7D64")
+	add_temporal_prop(Vector3(-30, 0, 2), Vector3(2.2, 1.5, 0.6), 0, crate)
+	add_temporal_prop(Vector3(30, 0, -2), Vector3(2.2, 1.5, 0.6), 0, crate)
+	add_temporal_prop(Vector3(0, 0, -16), Vector3(2.6, 1.6, 0.5), 90, Palette.INDIGO)
+	add_temporal_prop(Vector3(-36, high_y, 26), Vector3(2.4, 1.4, 0.5), 0, crate)
+	add_temporal_prop(Vector3(36, high_y, 26), Vector3(2.4, 1.4, 0.5), 0, crate)
 
 	# ZIPLINES: north express along the high route, hall top down to site B, west low to hall top
 	add_zipline(Vector3(-36, high_y, 34), Vector3(36, high_y, 34), "NORTH")

@@ -20,7 +20,11 @@ var _spawn_counter := 0
 func setup(mode_id: String, mapdef: MapDef) -> void:
 	mode = mode_id
 	def = mapdef
-	var path := "res://src/rules/CorebreakMode.gd" if mode == "corebreak" else "res://src/rules/RelicRushMode.gd"
+	var path := "res://src/rules/RelicRushMode.gd"
+	if mode == "corebreak":
+		path = "res://src/rules/CorebreakMode.gd"
+	elif mode == "hot_return":
+		path = "res://src/rules/HotReturnMode.gd"
 	if ResourceLoader.exists(path):
 		rules = load(path).new(self)
 
@@ -42,6 +46,8 @@ func role_of(team: int) -> String:
 
 func spawn_for(info: Dictionary, index: int) -> Dictionary:
 	var team := int(info.get("team", 0))
+	if mode == "hot_return" and team != 0:
+		return def.pick_spawn("attack" if team == 1 else "defend", index)
 	if mode == "corebreak" and team != 0:
 		return def.pick_spawn(role_of(team), index)
 	return def.pick_spawn("ffa", index)
@@ -50,7 +56,9 @@ func spawn_for(info: Dictionary, index: int) -> Dictionary:
 ## Respawn point farthest from living enemies.
 func respawn_point(p: Player) -> Dictionary:
 	var candidates: Array = []
-	if mode == "corebreak" and p.team != 0:
+	if mode == "hot_return" and p.team != 0:
+		candidates = def.role_spawns.get("attack" if p.team == 1 else "defend", [])
+	elif mode == "corebreak" and p.team != 0:
 		candidates = def.role_spawns.get(role_of(p.team), [])
 	else:
 		candidates = def.ffa_spawns
@@ -154,6 +162,38 @@ func on_player_left(id: int) -> void:
 	_respawn.erase(id)
 	if rules != null and rules.has_method("on_player_left"):
 		rules.on_player_left(id)
+
+
+## A rewinding player re-traverses history: restore nearby tagged props destroyed after that moment.
+func on_rewind_pass(p: Player, historical_t: float) -> void:
+	if def == null:
+		return
+	if not p.has_meta("restores"):
+		p.set_meta("restores", 0)
+	if not p.has_meta("restored_ids"):
+		p.set_meta("restored_ids", [])
+	if int(p.get_meta("restores")) >= 3:
+		return
+	for tp in def.temporal_props:
+		if not is_instance_valid(tp) or tp.state != "destroyed":
+			continue
+		if tp.destroyed_at <= historical_t:
+			continue
+		var flat := Vector2(tp.global_position.x - p.global_position.x, tp.global_position.z - p.global_position.z).length()
+		if flat > 5.0 or absf(tp.global_position.y - p.global_position.y) > 3.0:
+			continue
+		if tp.prop_id in p.get_meta("restored_ids"):
+			continue
+		if tp.restore_temporal(match_time):
+			p.set_meta("restores", int(p.get_meta("restores")) + 1)
+			p.get_meta("restored_ids").append(tp.prop_id)
+
+
+func request_ability(p: Player) -> void:
+	if rules != null and rules.has_method("request_ability"):
+		rules.request_ability(p)
+	else:
+		request_echo(p)
 
 
 func request_echo(p: Player) -> void:

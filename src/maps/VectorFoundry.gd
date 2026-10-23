@@ -39,6 +39,7 @@ func _build_layout() -> void:
 		spawn_point("attack", Vector3(-54, 1.0, -9 + i * 6), -90)
 		spawn_point("defend", Vector3(54, 1.0, -9 + i * 6), 90)
 	core_spawn = Vector3(-44, 0.6, 0)
+	hot_return_layout(Vector3(-44, 0, 0), Vector3(44, 0, 0), Vector3(-55, 0, 0), Vector3(55, 0, 0), Vector3(0, 3.0, 32), Vector3(38, 0, -26))
 	for sx in [-1.0, 1.0]:
 		box(Vector3(sx * 47, 1.4, 0), Vector3(1.2, 2.8, 10), cobalt)
 		box(Vector3(sx * 47, 1.4, 17), Vector3(1.2, 2.8, 8), cobalt)
@@ -96,6 +97,14 @@ func _build_layout() -> void:
 	site("B", Vector3(38, 0.0, -26), 6.0)
 	box(Vector3(31, 1.3, -19), Vector3(1.0, 2.6, 6), cobalt)
 	box(Vector3(45, 1.3, -33), Vector3(1.0, 2.6, 6), cobalt)
+
+	# Temporal destructibles: terracotta barriers
+	var terra := Palette.TERRACOTTA.lightened(0.15)
+	add_temporal_prop(Vector3(-30, 0, 6), Vector3(2.6, 1.6, 0.5), 0, terra)
+	add_temporal_prop(Vector3(30, 0, -6), Vector3(2.6, 1.6, 0.5), 0, terra)
+	add_temporal_prop(Vector3(-18, 0, 30), Vector3(2.4, 1.5, 0.5), 90, terra)
+	add_temporal_prop(Vector3(18, 0, -30), Vector3(2.4, 1.5, 0.5), 90, terra)
+	add_temporal_prop(Vector3(0, ring_y, 6), Vector3(2.2, 1.3, 0.5), 0, terra)
 
 	# VECTOR SLINGS: attackers' pads west, defenders' pads east, plus ring-to-dais hops
 	add_sling(Vector3(-40, 0, 20), Vector3(-9.5, ring_y, 5.5), 1.5, "W1")

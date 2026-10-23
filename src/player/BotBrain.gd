@@ -38,6 +38,7 @@ var site_pref := ""
 var last_hp := 100.0
 var hurt_t := 0.0
 var rng := RandomNumberGenerator.new()
+var want_ability := false
 
 
 func _init(player: Player, diff: String) -> void:
@@ -100,7 +101,7 @@ func think(delta: float) -> void:
 			strafe_t = rng.randf_range(0.5, 1.4)
 			if rng.randf() < 0.6:
 				strafe_dir = -strafe_dir
-		var objective_focus := goal_kind in ["plant", "defuse", "core"] and arrived
+		var objective_focus := goal_kind in ["plant", "defuse", "core", "field"] and arrived
 		if objective_focus:
 			move = Vector2.ZERO
 		elif goal_kind in ["plant", "defuse", "core", "beacon", "shard"] and not arrived and rng.randf() < 0.7:
@@ -114,7 +115,7 @@ func think(delta: float) -> void:
 			move = Vector2(strafe_dir * 0.8, fwd)
 			if p.dash_cd <= 0.0 and hurt_t > 0.0 and rng.randf() < float(prof["dash"]) * delta * 4.0:
 				buttons |= Player.BTN_DASH
-		if p.echo_cd <= 0.0 and rng.randf() < float(prof["echo"]) * delta * 0.8 and dist < 40.0:
+		if Game.match_server != null and Game.match_server.mode != "hot_return" and p.echo_cd <= 0.0 and rng.randf() < float(prof["echo"]) * delta * 0.8 and dist < 40.0:
 			buttons |= Player.BTN_ECHO
 	else:
 		if move != Vector2.ZERO:
@@ -122,7 +123,7 @@ func think(delta: float) -> void:
 		aim_pitch = lerpf(aim_pitch, 0.0, minf(1.0, delta * 4.0))
 		if p.ammo < Player.MAG_SIZE and p.reload_t <= 0.0 and rng.randf() < 0.02:
 			buttons |= Player.BTN_RELOAD
-		if move != Vector2.ZERO and goal_kind in ["core", "site", "beacon", "shard", "rotate", "escort", "investigate"]:
+		if move != Vector2.ZERO and goal_kind in ["core", "site", "beacon", "shard", "rotate", "escort", "investigate", "chase", "stabilize"]:
 			buttons |= Player.BTN_SPRINT
 	if arrived and goal_kind in ["plant", "defuse"]:
 		buttons |= Player.BTN_INTERACT
@@ -140,6 +141,9 @@ func think(delta: float) -> void:
 	else:
 		stuck_t = 0.0
 		stuck_pos = p.global_position
+	if want_ability:
+		buttons |= Player.BTN_ECHO
+		want_ability = false
 	p.inp_move = move
 	p.yaw = wrapf(aim_yaw, -PI, PI)
 	p.pitch = clampf(aim_pitch, -1.2, 1.2)
@@ -212,6 +216,8 @@ func _decide() -> void:
 		return
 	if ms.mode == "corebreak":
 		_decide_corebreak(rules)
+	elif ms.mode == "hot_return":
+		_decide_hotreturn(rules)
 	else:
 		_decide_relic(rules)
 
@@ -280,6 +286,66 @@ func _decide_corebreak(rules) -> void:
 		elif goal_kind == "guard" and p.global_position.distance_to(goal) < 2.5 and rng.randf() < 0.5:
 			var sp: Vector3 = def.sites[site_pref]["position"]
 			_set_goal(sp + _orbit_offset(rng.randf_range(4.0, 12.0)), "patrol")
+
+
+func _decide_hotreturn(rules) -> void:
+	var def: MapDef = Game.map_def
+	var role: String = rules.role_of(p.team)
+	var core: Dictionary = rules.core
+	var mode := str(core["mode"])
+	var core_pos: Vector3 = core["pos"]
+	if role == "attack":
+		if mode == "carried" and int(core["carrier"]) == p.id:
+			var st: Vector3 = def.stabilizers.get(rules.attacking_team(), Vector3.ZERO)
+			var dist := p.global_position.distance_to(st)
+			var projected: float = float(core["v"]) + dist / HotReturnRules.CARRY_SPEED * HotReturnRules.RATE
+			var here_field: int = rules._field_index_at(p.global_position)
+			if here_field >= 0 and float(rules.field_allowance[here_field]) > 0.3 and projected > 92.0:
+				_set_goal(p.global_position, "field")
+				return
+			if difficulty != "easy" and projected > 92.0:
+				var best := -1
+				var bd := 1e9
+				for i in def.fields.size():
+					if float(rules.field_allowance[i]) > 1.0:
+						var d: float = p.global_position.distance_to(def.fields[i]["position"])
+						if d < bd:
+							bd = d
+							best = i
+				if best >= 0:
+					_set_goal(def.fields[best]["position"], "field")
+					return
+			if not p.re_spent and difficulty != "easy" and p.hp < 45.0 and target != null and p.recorder.has_span(5.9) and rng.randf() < 0.6:
+				want_ability = true
+			_set_goal(st, "stabilize")
+			return
+		if mode == "cradle" or mode == "dropped" or mode == "locked":
+			if _closest_attacker_to(core_pos, rules) == p.id or rng.randf() < 0.3:
+				_set_goal(core_pos, "core")
+			else:
+				_set_goal(core_pos + _orbit_offset(7.0), "escort")
+			return
+		if mode == "carried":
+			var c: Player = Game.players.get(int(core["carrier"]))
+			if c != null and is_instance_valid(c):
+				_set_goal(c.global_position + _orbit_offset(5.0), "escort")
+				return
+		_set_goal(def.stabilizers.get(rules.attacking_team(), Vector3.ZERO) + _orbit_offset(6.0), "guard")
+	else:
+		var vault: Vector3 = def.vaults.get(rules.defending_team(), Vector3.ZERO)
+		if mode == "cradle":
+			if goal_kind != "guard" or p.global_position.distance_to(goal) < 2.0 or rng.randf() < float(prof["rotate"]) * 0.3:
+				var toward_mid := (Vector3.ZERO - vault).normalized()
+				_set_goal(vault + toward_mid * rng.randf_range(6.0, 16.0) + _orbit_offset(5.0), "guard")
+			return
+		if mode == "stabilized" or mode == "detonated":
+			return
+		_set_goal(core_pos + _orbit_offset(3.0), "chase")
+		var ticking := mode == "carried" or mode == "dropped"
+		if ticking and not p.ff_spent and p.global_position.distance_to(core_pos) < 7.0:
+			var chance: float = {"easy": 0.15, "medium": 0.45, "hard": 0.8}.get(difficulty, 0.4)
+			if rng.randf() < chance:
+				want_ability = true
 
 
 func _decide_relic(rules) -> void:

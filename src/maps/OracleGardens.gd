@@ -48,6 +48,7 @@ func _build_layout() -> void:
 		spawn_point("attack", Vector3(-63, 1.0, -12 + i * 8), -90)
 		spawn_point("defend", Vector3(63, 1.0, -12 + i * 8), 90)
 	core_spawn = Vector3(-50, 0.6, 0)
+	hot_return_layout(Vector3(-50, 0, 0), Vector3(50, 0, 0), Vector3(-63, 0, 0), Vector3(63, 0, 0), Vector3(-22, 2.0, 22), Vector3(22, 2.0, -22))
 
 	# Central plaza: raised terrace ring with ramps and a monolith
 	cylinder(Vector3(0, 0.6, 0), 14.0, 1.2, porcelain)
@@ -103,6 +104,15 @@ func _build_layout() -> void:
 	# PHASE GATES: north-west flank <-> south-east flank, and south-west <-> north-east
 	add_gate_pair(Vector3(-40, 0, 44), 180, Vector3(40, 0, -44), 0, "I")
 	add_gate_pair(Vector3(-40, 0, -44), 0, Vector3(40, 0, 44), 180, "II")
+
+	# Temporal destructibles: ceramic barricades on the lanes
+	var ceramic := Palette.PORCELAIN.darkened(0.05)
+	add_temporal_prop(Vector3(-40, 0, -4), Vector3(2.6, 1.6, 0.5), 0, ceramic)
+	add_temporal_prop(Vector3(-14, 0, 24), Vector3(2.6, 1.6, 0.5), 90, ceramic)
+	add_temporal_prop(Vector3(14, 0, -24), Vector3(2.6, 1.6, 0.5), 90, ceramic)
+	add_temporal_prop(Vector3(40, 0, 4), Vector3(2.6, 1.6, 0.5), 0, ceramic)
+	add_temporal_prop(Vector3(0, 1.2, 15), Vector3(2.2, 1.4, 0.5), 0, ceramic)
+	add_temporal_prop(Vector3(0, 1.2, -15), Vector3(2.2, 1.4, 0.5), 0, ceramic)
 
 	# Signal lights
 	for p in [Vector3(-50, 3.0, 45), Vector3(50, 3.0, -45), Vector3(0, 9.3, 0)]:

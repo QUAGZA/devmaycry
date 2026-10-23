@@ -37,6 +37,10 @@ var _hit_t := 0.0
 var _flash_t := 0.0
 var _feed_items: Array = []
 var _last_warn := -1
+var vol_box: VBoxContainer
+var vol_lbl: Label
+var vol_bar: ColorRect
+var vol_bg: ColorRect
 
 
 func _ready() -> void:
@@ -84,6 +88,28 @@ func _build() -> void:
 	mode_lbl.add_theme_color_override("font_outline_color", Palette.INK)
 	mode_lbl.add_theme_constant_override("outline_size", 5)
 	top.add_child(mode_lbl)
+	vol_box = VBoxContainer.new()
+	vol_box.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	vol_box.position = Vector2(-150, 112)
+	vol_box.size = Vector2(300, 40)
+	root.add_child(vol_box)
+	vol_lbl = UiTheme.stamp("CAUSAL CORE / CONTAINED", Palette.MINT, 13)
+	vol_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vol_lbl.add_theme_color_override("font_outline_color", Palette.INK)
+	vol_lbl.add_theme_constant_override("outline_size", 5)
+	vol_box.add_child(vol_lbl)
+	var vol_holder := Control.new()
+	vol_holder.custom_minimum_size = Vector2(300, 8)
+	vol_box.add_child(vol_holder)
+	vol_bg = ColorRect.new()
+	vol_bg.color = Color(Palette.INK, 0.6)
+	vol_bg.size = Vector2(300, 8)
+	vol_holder.add_child(vol_bg)
+	vol_bar = ColorRect.new()
+	vol_bar.color = Palette.MINT
+	vol_bar.size = Vector2(0, 8)
+	vol_holder.add_child(vol_bar)
+	vol_box.visible = false
 
 	# Top left: score card
 	var tl := VBoxContainer.new()
@@ -395,7 +421,32 @@ func _refresh_state() -> void:
 	var s := Game.state
 	var mode := str(s.get("mode", Game.mode_id))
 	var phase := str(s.get("phase", ""))
-	if mode == "corebreak":
+	if mode == "hot_return":
+		var scores: Dictionary = s.get("scores", {1: 0, 2: 0})
+		score_lbl.text = "COBALT %d   %d VERMILION" % [int(scores.get(1, 0)), int(scores.get(2, 0))]
+		var ot := bool(s.get("overtime", false))
+		round_lbl.text = "%s / ROUND %d%s" % ["OVERTIME" if ot else "REGULATION", int(s.get("round", 1)), "" if ot else " OF 4"]
+		var me := Game.local_player
+		var team := me.team if me != null and is_instance_valid(me) else 0
+		var roles: Dictionary = s.get("roles", {})
+		var role := str(roles.get(team, "")).to_upper()
+		role_lbl.text = role
+		role_lbl.add_theme_color_override("font_color", Palette.VERMILION if role == "ATTACK" else Palette.COBALT)
+		if role == "ATTACK":
+			objective_lbl.text = "ATTACK: steal the Causal Core from the enemy vault and reach your Stabilizer before it detonates"
+			echo_card["name"].text = "REVERSE"
+		elif role == "DEFEND":
+			objective_lbl.text = "DEFEND: hold the vault, pressure the carrier, let the Core reach 100%"
+			echo_card["name"].text = "FAST-FWD"
+		else:
+			objective_lbl.text = str(s.get("objective", ""))
+		mode_lbl.text = "HOT RETURN / %s" % phase.to_upper().replace("_", " ")
+		ffa_box.visible = false
+		site_lbl.visible = true
+		role_lbl.visible = true
+		round_lbl.visible = true
+		vol_box.visible = true
+	elif mode == "corebreak":
 		var scores: Dictionary = s.get("scores", {1: 0, 2: 0})
 		score_lbl.text = "COBALT %d   %d VERMILION" % [int(scores.get(1, 0)), int(scores.get(2, 0))]
 		var ot := bool(s.get("overtime", false))
@@ -484,7 +535,13 @@ func _process(delta: float) -> void:
 			ammo_state_lbl.text = "PULSE CASTER"
 			ammo_state_lbl.add_theme_color_override("font_color", Palette.MINT)
 		_update_card(dash_card, p.dash_cd, Player.DASH_COOLDOWN)
-		_update_card(echo_card, p.echo_cd, 18.0)
+		if Game.mode_id == "hot_return":
+			var roles: Dictionary = Game.state.get("roles", {})
+			var spent := p.ff_spent if str(roles.get(p.team, "")) == "DEFEND" else p.re_spent
+			_update_charge(echo_card, not spent)
+			_update_hotreturn_live(p)
+		else:
+			_update_card(echo_card, p.echo_cd, 18.0)
 		protect_lbl.visible = p.spawn_protect_t > 0.0
 		dead_lbl.visible = not p.alive
 		if p.alive:
@@ -536,6 +593,52 @@ func _process(delta: float) -> void:
 		scoreboard_panel.visible = sb
 		if sb:
 			_refresh_scoreboard()
+
+
+func _update_charge(card: Dictionary, available: bool) -> void:
+	var fill: ColorRect = card["fill"]
+	var panel: PanelContainer = card["root"]
+	fill.size = Vector2(panel.size.x, panel.size.y if available else 0.0)
+	fill.position = Vector2(0, panel.size.y - fill.size.y)
+	var cdl: Label = card["cd"]
+	cdl.text = "AVAILABLE" if available else "SPENT"
+	cdl.add_theme_color_override("font_color", Palette.MINT if available else Palette.VERMILION)
+
+
+func _update_hotreturn_live(p: Player) -> void:
+	var core: Dictionary = Game.live.get("core", {})
+	var mode := str(core.get("mode", "cradle"))
+	var v := float(core.get("v", 0.0))
+	var k := clampf(v / 100.0, 0.0, 1.0)
+	vol_bar.size.x = 300.0 * k
+	vol_bar.color = Palette.MINT if k < 0.5 else (Palette.BRASS if k < 0.8 else Palette.VERMILION)
+	var txt := ""
+	match mode:
+		"cradle":
+			txt = "CAUSAL CORE / CONTAINED IN THE VAULT"
+		"carried":
+			txt = "CORE / %s CARRYING / %d%%" % [str(core.get("carrier_name", "")), int(v)]
+		"dropped":
+			txt = "CORE / DROPPED / %d%% TICKING" % int(v)
+		"locked":
+			var ll := float(core.get("lock_left", 0.0))
+			txt = "CORE / TEMPORAL LOCK / %d%% FROZEN%s" % [int(v), (" / %0.1f s" % ll) if ll > 0.0 else " / PICK UP"]
+		"stabilized":
+			txt = "CORE / STABILIZED"
+		"detonated":
+			txt = "CORE / DETONATED"
+	vol_lbl.text = txt
+	vol_lbl.add_theme_color_override("font_color", Palette.COBALT if mode == "locked" else (Palette.MINT if k < 0.5 else (Palette.BRASS if k < 0.8 else Palette.VERMILION)))
+	var fields: Array = Game.live.get("fields", [])
+	var ftxt := ""
+	for i in fields.size():
+		ftxt += "%sFIELD %s %0.1fs" % ["   " if i > 0 else "", ["A", "B"][i % 2], float(fields[i].get("remaining", 0.0))]
+	site_lbl.text = ftxt
+	var ff: Dictionary = Game.live.get("ff", {})
+	if bool(ff.get("active", false)):
+		hint_lbl.text = "FAST-FORWARD ACTIVE / %0.1f s" % float(ff.get("left", 0.0))
+	if p.rewind_t > 0.0:
+		hint_lbl.text = "REVERSE ENTROPY / RE-TRAVERSING YOUR ROUTE  ·  AIM AND FIRE FREELY"
 
 
 func _update_card(card: Dictionary, cd: float, total: float) -> void:

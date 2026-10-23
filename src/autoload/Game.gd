@@ -30,11 +30,12 @@ var time_left := 0.0
 var server_tick := 0
 var in_match := false
 var map_id := "oracle_gardens"
-var mode_id := "corebreak"
+var mode_id := "hot_return"
 var match_server: MatchServer = null
 var autopilot = null
 var paused_local := false
 var echoes: Dictionary = {}
+var props: Dictionary = {}
 var menu_message := ""
 var open_lobby_on_menu := false
 var _map_ready: Dictionary = {}
@@ -45,6 +46,7 @@ var _shots: Array = []
 var _shot_elapsed := 0.0
 var _log_snap_t := 0.0
 var _probed := false
+var _window_logged := false
 
 
 func _ready() -> void:
@@ -60,6 +62,20 @@ func _ready() -> void:
 			_shots.append(float(s))
 		_shots.sort()
 	log_ev("Boot", "ready", {"args": args, "headless": DisplayServer.get_name() == "headless"})
+	if DisplayServer.get_name() != "headless":
+		if not OS.get_cmdline_args().has("--resolution"):
+			Settings.apply_window()
+		var ws := DisplayServer.window_get_size()
+		var ss := DisplayServer.screen_get_size()
+		log_ev("Boot", "window", {"window": [ws.x, ws.y], "screen": [ss.x, ss.y], "viewport": [get_viewport().get_visible_rect().size.x, get_viewport().get_visible_rect().size.y]})
+	if args.has("settings-test"):
+		if str(args["settings-test"]) == "write":
+			Settings.mouse_sensitivity = 0.0042
+			Settings.master_volume = 0.37
+			Settings.save_prefs()
+			log_ev("Settings", "written", {"sens": Settings.mouse_sensitivity, "master": Settings.master_volume, "path": ProjectSettings.globalize_path(Settings.PATH)})
+		else:
+			log_ev("Settings", "read", {"sens": Settings.mouse_sensitivity, "master": Settings.master_volume})
 
 
 func _parse_args() -> void:
@@ -99,7 +115,8 @@ func host_start_match() -> void:
 	Net.lobby["locked"] = true
 	Net.broadcast_lobby()
 	Net.fill_bots()
-	Net.ensure_playable()
+	if not args.has("allow-empty-team"):
+		Net.ensure_playable()
 	mode_id = str(Net.lobby["mode"])
 	map_id = str(Net.lobby["map"])
 	_map_ready.clear()
@@ -124,6 +141,7 @@ func rpc_load_map(map_id_: String, mode_id_: String) -> void:
 func _clear_match_nodes() -> void:
 	players.clear()
 	echoes.clear()
+	props.clear()
 	local_player = null
 	world = null
 	map_def = null
@@ -317,6 +335,9 @@ func _physics_process(delta: float) -> void:
 			match_server.step(delta)
 		if server_tick % SNAPSHOT_EVERY == 0:
 			_send_snapshot()
+	if args.has("kill-local-at") and multiplayer.is_server() and local_player != null and is_instance_valid(local_player) and local_player.alive and _shot_elapsed > float(args["kill-local-at"]):
+		local_player.apply_damage(999.0, -99, "debug", 0.0)
+		log_ev("Debug", "killed_local", {})
 	if args.has("log-snap"):
 		_log_snap_t -= delta
 		if _log_snap_t <= 0.0:
@@ -331,6 +352,10 @@ func _physics_process(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
+	if not _window_logged and DisplayServer.get_name() != "headless" and Time.get_ticks_msec() > 2500:
+		_window_logged = true
+		var ws := DisplayServer.window_get_size()
+		log_ev("Boot", "window_settled", {"window": [ws.x, ws.y], "mode": DisplayServer.window_get_mode(), "note": Settings.last_window_note})
 	if _quit_t >= 0.0:
 		_quit_t -= delta
 		if _quit_t <= 0.0:
@@ -474,6 +499,13 @@ func rpc_echo_end(eid: int, reason: String) -> void:
 	if e != null and is_instance_valid(e):
 		e.finish(reason)
 	echoes.erase(eid)
+
+
+@rpc("authority", "call_local", "reliable")
+func rpc_prop_state(prop_id: int, state: String, version: int, t: float) -> void:
+	var prop = props.get(prop_id)
+	if prop != null and is_instance_valid(prop):
+		prop.apply_state(state, version, t)
 
 
 @rpc("authority", "call_local", "reliable")

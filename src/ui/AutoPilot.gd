@@ -48,6 +48,7 @@ func _run(step: PackedStringArray, p: Player) -> Dictionary:
 		"idle":
 			pass
 		"wait":
+			pitch = p.pitch
 			done = _step_t >= float(step[1]) if step.size() > 1 else true
 		"forward":
 			move = Vector2(0, -1)
@@ -91,10 +92,18 @@ func _run(step: PackedStringArray, p: Player) -> Dictionary:
 					b |= Player.BTN_INTERACT
 				else:
 					done = true
-		"echo":
+		"aim":
+			var to := Vector3(float(step[1]), float(step[2]), float(step[3])) - p.eye_position()
+			yaw = atan2(-to.x, -to.z)
+			pitch = atan2(to.y, Vector2(to.x, to.z).length())
+			p.yaw = yaw
+			p.pitch = pitch
+			done = _step_t > 0.3
+		"echo", "ability":
 			b |= Player.BTN_ECHO
 			done = _step_t > 0.2
 		"fire":
+			pitch = p.pitch
 			_fire_toggle = not _fire_toggle
 			if _fire_toggle:
 				b |= Player.BTN_FIRE

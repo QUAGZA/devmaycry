@@ -15,25 +15,33 @@ func _ready() -> void:
 
 
 var spec_cam: Camera3D = null
+var spec_target: Player = null
+var spec_index := 0
 
 
 func _process(_delta: float) -> void:
 	var lp := Game.local_player
 	if lp == null or not is_instance_valid(lp):
 		return
-	if lp.alive or Game.mode_id != "corebreak":
+	if lp.alive or Game.mode_id == "relic_rush":
 		if not lp.cam.current:
 			lp.cam.current = true
-		Game.spectating = ""
+		_release_spectate()
 		return
-	var target: Player = null
-	for other in Game.players.values():
+	var candidates: Array = []
+	for other: Player in Game.players.values():
 		if is_instance_valid(other) and other != lp and other.alive and (lp.team == 0 or other.team == lp.team):
-			target = other
-			break
-	if target == null:
-		Game.spectating = ""
+			candidates.append(other)
+	if candidates.is_empty():
+		_release_spectate()
 		return
+	if Game.autopilot == null and Input.is_action_just_pressed("fire") and candidates.size() > 1:
+		spec_index += 1
+	var target: Player = candidates[posmod(spec_index, candidates.size())]
+	if target != spec_target:
+		_release_spectate()
+		spec_target = target
+		spec_target.set_spectated(true)
 	if spec_cam == null:
 		spec_cam = Camera3D.new()
 		spec_cam.fov = 86.0
@@ -44,6 +52,13 @@ func _process(_delta: float) -> void:
 	if not spec_cam.current:
 		spec_cam.current = true
 	Game.spectating = target.pname
+
+
+func _release_spectate() -> void:
+	Game.spectating = ""
+	if spec_target != null and is_instance_valid(spec_target):
+		spec_target.set_spectated(false)
+	spec_target = null
 
 
 func _unhandled_input(event: InputEvent) -> void:

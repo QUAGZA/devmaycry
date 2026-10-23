@@ -15,6 +15,10 @@ var sites: Dictionary = {}          # "A"/"B" -> {"position": Vector3, "radius":
 var shard_points: Array = []        # Relic Rush pickups
 var beacon_points: Array = []       # Relic Rush beacon locations
 var core_spawn := Vector3.ZERO
+var vaults: Dictionary = {}        # team side -> cradle position
+var stabilizers: Dictionary = {}   # team side -> home Stabilizer position
+var fields: Array = []             # [{"position", "radius"}] Stability Fields, off the direct route
+var temporal_props: Array = []     # TemporalProp nodes
 var root: Node3D = null
 var nav: NavigationRegion3D = null
 var geometry: Node3D = null
@@ -179,6 +183,12 @@ func site(site_id: String, pos: Vector3, radius: float) -> void:
 	sites[site_id] = {"position": pos, "radius": radius}
 
 
+func hot_return_layout(vault1: Vector3, vault2: Vector3, stab1: Vector3, stab2: Vector3, field_a: Vector3, field_b: Vector3, radius: float = 12.0) -> void:
+	vaults = {1: vault1, 2: vault2}
+	stabilizers = {1: stab1, 2: stab2}
+	fields = [{"position": field_a, "radius": radius}, {"position": field_b, "radius": radius}]
+
+
 func light_env(sun_dir: Vector3, sun_color: Color, sky_top: Color, sky_horizon: Color, ground: Color, fog_color: Color, fog_density: float = 0.004) -> void:
 	var sun := DirectionalLight3D.new()
 	sun.name = "Sun"
@@ -245,6 +255,19 @@ func reset_features() -> void:
 	for f in features.get_children():
 		if f.has_method("drop_all"):
 			f.drop_all()
+	for tp in temporal_props:
+		if is_instance_valid(tp):
+			tp.reset_round()
+
+
+## Tagged breakable barricade. Not every mesh is destructible: only these.
+func add_temporal_prop(pos: Vector3, size: Vector3, yaw_deg: float, color: Color) -> TemporalProp:
+	var tp := TemporalProp.new()
+	tp.setup(temporal_props.size() + 1, pos, size, yaw_deg, color)
+	geometry.add_child(tp)
+	temporal_props.append(tp)
+	Game.props[tp.prop_id] = tp
+	return tp
 
 
 func pick_spawn(role: String, index: int) -> Dictionary:

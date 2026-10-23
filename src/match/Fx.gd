@@ -61,6 +61,27 @@ func _on_fx(kind: String, _id: int, pos: Vector3) -> void:
 			_spark(pos + Vector3(0, 1.2, 0), Palette.MINT, 0.3, 0.6)
 		"echo_shot":
 			_spark(pos, Palette.VERMILION, 0.15, 0.25)
+		"restore":
+			_spark(pos + Vector3(0, 1.0, 0), Palette.MINT, 0.5, 1.6)
+		"impact":
+			_spark(pos + Vector3(0, 0.8, 0), Palette.PORCELAIN, 0.15, 0.35)
+		"detonate":
+			_spark(pos + Vector3(0, 1.5, 0), Palette.VERMILION, 1.2, 9.0)
+			Sfx.play("elim", 0.0, 0.5)
+		"core_pickup":
+			_spark(pos + Vector3(0, 1.5, 0), Palette.BRASS, 0.4, 1.2)
+			Sfx.play("capture", -6.0)
+		"core_drop":
+			_spark(pos + Vector3(0, 1.0, 0), Palette.BRASS, 0.4, 1.0)
+		"stabilize":
+			_spark(pos + Vector3(0, 1.5, 0), Palette.MINT, 1.0, 4.0)
+			Sfx.play("sting", -4.0)
+		"rewind_start":
+			_spark(pos + Vector3(0, 1.2, 0), Palette.COBALT, 0.6, 2.0)
+			Sfx.play("echo_cast", -4.0)
+		"ff_start":
+			_spark(pos + Vector3(0, 0.3, 0), Palette.VERMILION, 0.6, 3.0)
+			Sfx.play("echo_break", -6.0, 1.3)
 		"reload":
 			if _id == Game.local_id():
 				Sfx.play("reload", -6.0)
