@@ -104,17 +104,18 @@ func _build_layout() -> void:
 	for xx in [-12.0, 0.0, 12.0]:
 		MapDecor.solid_column(self, Vector3(xx, 0, -30.0), TERRACE_Y - 0.4, 0.35, ivory)
 	# sunken basin: stairs from the courtyard and from both chapels, pool, cover
-	MapKit.stairs(self, Vector3(0, 0, 19.5), Vector3(0, BASIN_Y, 23.5), 6.0, pave, ivory)
+	# stairs start exactly at the hole edge (z 22.5 / |x| 12) and descend inside the basin
+	MapKit.stairs(self, Vector3(0, 0, 22.5), Vector3(0, BASIN_Y, 28.0), 6.0, pave, ivory)
 	for sx2 in [-1.0, 1.0]:
-		MapKit.stairs(self, Vector3(sx2 * 17.5, 0, 31.0), Vector3(sx2 * 12.5, BASIN_Y, 31.0), 5.0, pave, ivory)
-		box(Vector3(sx2 * 5.0, BASIN_Y + 0.7, 33.0), Vector3(2.6, 1.4, 1.2), glaze)
+		MapKit.stairs(self, Vector3(sx2 * 12.0, 0, 31.0), Vector3(sx2 * 6.5, BASIN_Y, 31.0), 5.0, pave, ivory)
+		box(Vector3(sx2 * 4.0, BASIN_Y + 0.7, 35.5), Vector3(2.6, 1.4, 1.2), glaze)
 	var water := StandardMaterial3D.new()
 	water.albedo_color = Color("3F6E86")
 	water.roughness = 0.04
 	water.metallic = 0.4
 	water.rim_enabled = true
 	decal(Vector3(0, BASIN_Y + 0.03, 34.0), Vector2(8, 4), water)
-	box(Vector3(0, BASIN_Y + 0.6, 28.0), Vector3(1.4, 1.2, 3.0), ivory)
+	box(Vector3(0, BASIN_Y + 0.6, 32.0), Vector3(3.0, 1.2, 1.4), ivory)
 
 	# ---------------------------------------------------------------- objectives and spawns
 	hot_return_layout(Vector3(-55, 0, 0), Vector3(55, 0, 0), Vector3(-66, 0, -22), Vector3(66, 0, -22), Vector3(-30, TERRACE_Y, -27), Vector3(30, TERRACE_Y, -27), 12.0)

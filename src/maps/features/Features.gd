@@ -431,6 +431,8 @@ class Ladder extends Area3D:
 		if not multiplayer.is_server():
 			return
 		for p in Features.players_in(self):
+			if p.ladder_t <= 0.0:
+				Game.log_ev("Feature", "ladder_enter", {"id": p.id, "y": snappedf(p.global_position.y, 0.1), "top": top_y})
 			p.ladder_t = 0.15
 			p.ladder_out = out
 			p.ladder_top = top_y

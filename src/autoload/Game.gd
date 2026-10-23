@@ -371,7 +371,7 @@ func _physics_process(delta: float) -> void:
 			var pauses := 0.0 if key == "direct" else (7.0 if pts.size() == 3 else 14.0)
 			var e := HotReturnRules.route_exposure(total, pauses)
 			log_ev("Route", key, {"map": map_id, "metres": snappedf(total, 0.1), "carry_s": snappedf(float(e["carry"]), 0.1), "exposure_s": snappedf(float(e["exposure"]), 0.1), "volatility": snappedf(float(e["volatility"]), 0.1), "reachable": ok})
-	if args.has("navprobe") and not _probed and server_tick > 5:
+	if args.has("navprobe") and not _probed and server_tick > 60:
 		_probed = true
 		var map_rid: RID = world.get_world_3d().navigation_map
 		for spec in str(args["navprobe"]).split(";"):

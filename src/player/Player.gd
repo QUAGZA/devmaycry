@@ -460,6 +460,8 @@ func server_step(delta: float) -> void:
 	if ladder_t > 0.0 and not carrying_core:
 		_step_ladder(delta, pressed)
 		return
+	if has_meta("ladder_topped"):
+		remove_meta("ladder_topped")
 	var staggered := stagger_t > 0.0
 	crouching = (inp_buttons & BTN_CROUCH) != 0
 	head.position.y = lerpf(head.position.y, CROUCH_HEIGHT if crouching else STAND_HEIGHT, 12.0 * delta)
@@ -538,6 +540,9 @@ func _step_ladder(delta: float, pressed: int) -> void:
 	velocity.x = side.x * 2.0
 	velocity.z = side.z * 2.0
 	if global_position.y > ladder_top - 0.15 and toward > 0.25:
+		if velocity.y > 0.0 and not has_meta("ladder_topped"):
+			set_meta("ladder_topped", true)
+			Game.log_ev("Feature", "ladder_top", {"id": id, "y": snappedf(global_position.y, 0.1)})
 		velocity += -ladder_out * 3.5
 		velocity.y = maxf(velocity.y, 1.5)
 	move_and_slide()
