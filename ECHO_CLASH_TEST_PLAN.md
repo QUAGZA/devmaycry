@@ -22,8 +22,19 @@ PASS = run and observed in a log or screenshot under `build/`. NOT RUN = needs a
 | M8 | Minimap with LOS-only enemies, Caps Lock map, settings persistence, 1920x1080 windowed | `hud_1_13.png`, `menu_1_00.png`, `winprobe2.log` |
 | M9 | Room code discovery on the current LAN address, exported exe as host + client with bots | `reg_code_client.log`, `exe2_host.log`, `exe2_client.log` |
 | M10 | Relic Rush bots: points, beacon rotation, once-per-match rewinds | `reg_relic.log`, `reg_relic2.log` |
+| V1 | Route probes after the art pass, all maps: direct 120.3 / 132.4 / 124.9 m, both-field route 144.5 / 152.2 / 150.1 m, all reachable, direct carry still detonates | `route_*_v3.log`, `route_*_v4.log` |
+| V2 | New spaces reachable: Oracle alcoves and Foundry lobes (nav probes), Tideline pier (player walked onto it) | `route_oracle_alcove.log`, `pier.log`, `lobe.log` |
+| V3 | Reverse Entropy loop on the new build: drop at 34.2 %, rewound to 11.1 % and frozen, re-pickup at 11.1 % | `reg2_rewind_host.log` |
+| V4 | Restoration safety: nobody inside, collision restored; defender inside, visual-only restore with logged blocker | `prop_safety2_host.log`, `prop_safety_host.log` |
+| V5 | Settings v2 round trip (preset, window mode, AA, shadows, textures, effects) in an isolated file; player file checksum unchanged by test runs | session log |
+| V6 | Performance at 1080p High with bots on all maps (214-279 FPS) | `final_*.log`, `perf_*.log` |
+| V7 | Exported exe (141 MB) host + client with bots, no script errors | `exe3_host.log`, `exe4_host.log`, `exe4_client.log` |
 
 ## Manual checklist (NOT RUN by the agent)
+
+0. Visual pass: walk each map and look for floating or clipping props; visit the alcoves, piers and lobes; look down
+   at the first-person body; switch 1-4 and aim down sights with each weapon; watch a bot run, aim, reload and die up close;
+   listen for footsteps on stone and metal decks.
 
 1. Practice, Hot Return, Oracle Gardens, 2v2 Medium: countdown, LIVE, bots contest the vault, round result named.
 2. Steal the Core, run direct: detonation around the plaza. Run via both fields: stabilization with ~20 % margin.

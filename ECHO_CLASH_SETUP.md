@@ -9,8 +9,20 @@ resolutions in Settings; the saved preference wins on later launches).
 1. Launch `Godot_v4.7.2-stable_win64.exe`, **Import** `D:\devmaycry\project.godot`, **Open**, press **F5**.
 2. Or run the packaged build: `build\EchoClash.exe` (export it with `powershell -File tools\package.ps1`).
 
-No third-party assets: geometry, materials, shaders, sounds, player figures and UI are generated in code
-(`tools/gen_sfx.py` produced the 28 WAV cues under `assets/sfx`).
+Third-party assets are CC0 only (Quaternius characters and animations, Kenney kits and impact sounds, Poly Haven
+detail textures); see `ASSET_REGISTER.md`. Raw downloads stay in `assets/_source/` (git-ignored); processed files
+live in `assets/models`, `assets/textures` and `assets/sfx/kenney`. Shaders, maps, UI and the 28 procedural cues
+(`tools/gen_sfx.py`) are original.
+
+Material preview / style check scene:
+
+```
+Godot_v4.7.2-stable_win64_console.exe --path . res://src/style/MaterialPreview.tscn -- --shot=build/shots/material_preview.png
+```
+
+Display: Settings > WINDOW MODE (windowed / borderless / fullscreen), resolution, preset, shadows, anti-aliasing
+(FXAA default; MSAA shows edge dots with the toon shader), texture and effects quality. If a mode leaves the window
+unusable, start with `-- --force-windowed`, or delete `%APPDATA%\Godot\app_userdata\Echo Clash\settings.cfg`.
 
 ## Controls
 
@@ -64,4 +76,4 @@ Headless user arguments (after `--`): `--role=host|join|code`, `--ip`, `--port`,
 `--autostart=<s>`, `--min_players`, `--mode=hot_return|relic_rush`, `--map`, `--bots=true|false`, `--team_size`,
 `--ffa_size`, `--bot_difficulty`, `--auto=<pattern|seq:...>`, `--log-snap`, `--quit-after-sec`, `--screenshot-at`,
 `--screenshot-title`, `--force-windowed`, `--routeprobe`, `--navprobe`, `--kill-local-at`, `--open-map-at`,
-`--allow-empty-team`, `--settings-test=write|read`, `--winprobe`.
+`--allow-empty-team`, `--settings-test=write|read`, `--settings-path=user://<file>`, `--open-settings`, `--perf`, `--winprobe`.

@@ -1,9 +1,44 @@
-# ECHO CLASH — Build Status (v2 Hot Return rebuild, 2026-10-24)
+# ECHO CLASH — Build Status (v2 Hot Return + visual production pass, 2026-10-24)
 
 Engine: **Godot 4.7.2.stable.official**, standard build. Project `D:\devmaycry`. Packaged `build/EchoClash.exe`.
 Every "tested" claim points to a log or screenshot under `build/` produced by the commands in `ECHO_CLASH_SETUP.md`.
 
-## Implemented and tested
+## Visual production pass (2026-10-24, after the Hot Return rebuild)
+
+| Area | What changed | Evidence |
+|---|---|---|
+| Style system | `palimpsest_toon.gdshader`: stepped light bands with soft edges, cobalt shade tint, restrained screen-space halftone in shade, rim light, stepped specular for metals, triplanar CC0 detail (luminance + normal) under the palette colour, distance quality cut. `ink_outline.gdshader`: depth-only screen-space ink that fades near (viewmodel stays clean) and far. `Style.gd` material library (stone, plaster, ceramic, floor, cliff, concrete, metal, rust, cloth, gear, skin, foliage) used by every map surface and imported model | `material_preview.png`, `material_preview2.png`, `rig_close4.png` |
+| External assets | Quaternius Universal Base Characters + Universal Animation Library, Kenney Blaster / Nature / Space Station kits and Impact Sounds, 7 Poly Haven texture sets (all CC0). Register with URLs, licences and modifications: `ASSET_REGISTER.md` | imports clean (`import_assets.log`) |
+| Characters | `TacticalRig.gd`: rigged human body driven by an AnimationTree (idle/walk/jog/sprint, crouch, jump, upper-body aim, shoot and reload one-shots, death clip), helmet + visor, plate carrier, pouches, pads, boots, gloves, backpack; team accents; weapon in the right hand; rewind shader as overlay | `rig_close6.png`, `og_art_1_09.png` |
+| First person | `FPArms.gd`: the same character in first person with the head bone collapsed; real hands in the aim pose, weapon in the right hand locked to the camera, sway, bob, kick, reload dip, magazine drop, shell ejection, switch dip. Capsule arms remain as a fallback | `fp2_1_12.png`, `wpn_v4_1_15.png` |
+| Weapons | Rifle / shotgun / sniper / machine gun built from Kenney Blaster Kit bodies + scopes/magazines, desaturated to graphite with a per-weapon accent; muzzle flashes at the real barrel tip | `wpn_v4_*.png` |
+| Oracle Gardens | Worn-tile floor and paving bands, buttressed perimeter with broken crowns, four corner bastions, two point-symmetric garden alcoves through the north/south walls (curved walls, basin, statue, trees), columned sanctuary on the upper terrace, arches over the four ramps, fractured obelisk with mint/orange faults, arches around the phase gates, hedges and trees, cliff and forest backdrop | `og_art_*.png`, `v6_play_1_20.png`, `alcove2_1_26.png`, `final_oracle_gardens_*.png` |
+| Tideline Exchange | Animated toon sea, pier piles, crane landmark through the exchange tower, two projecting piers with rails and cargo cover, seawall bastions, distant cranes and docks, zipline masts with hazard bands, pipes and rails | `art_tideline_exchange_*.png`, `pier_1_30.png`, `exe3_1_14.png` |
+| Vector Foundry | Rotating reactor rings, spindle struts, gantries, kiln stacks on the horizon, corner bastions, two machinery lobes with a press housing | `art_vector_foundry_*.png`, `lobe_fxaa_1_30.png`, `final_vector_foundry_*.png` |
+| Core / props | Causal Core containment device (glass shell, brass ribs, end caps, gyroscope band) with stable / unstable / critical / locked / stabilized colours; temporal barricades intact, damaged (fault glow), destroyed, restored, expired | `reg2_rewind_host.log`, `prop_safety2_host.log` |
+| Audio | Positional 3D one-shots: footsteps by surface (stone/concrete, metal on raised industrial decks), landing, shell casings, stone/metal/flesh impacts (Kenney CC0), on top of the 28 procedural cues | code path `Sfx.play_at` (audibility not verifiable headlessly) |
+| HUD / UI | Health and ammo panels anchored to the corners (no clipping), magazine/reserve split, compact ability chips, smaller notices, constant-size world labels; main menu renders the real Oracle Gardens with a cinematic orbit and the Core; PLAY / HOST LAN GAME / JOIN LAN GAME / SETTINGS / CREDITS / EXIT; two-column settings | `menu_v3_1_00.png`, `settings_v4_1_00.png`, `v5_play_1_30.png` |
+| Settings | Window mode (windowed / borderless / fullscreen), preset, shadow quality, anti-aliasing (off / FXAA / MSAA 2x / 4x / TAA), texture quality, effects quality, frame cap, VSync; applied to the renderer; persisted; v2 migration; automated runs never touch the player file | `graphics_applied` log lines, isolated `settings_test.cfg` round trip |
+
+### Safety rule added (Reverse Entropy restoration)
+A barricade restored by a rewind never re-enables collision inside a living player: the server checks the
+footprint, restores visually without collision and logs `collision:false, blocked_by:<id>` (`prop_safety_host.log`).
+
+### Performance (measured with `--perf`, 1920x1080 window, High, FXAA, 6-8 players with bots)
+Oracle Gardens 217-239 FPS, Tideline Exchange 214-279 FPS, Vector Foundry 215-259 FPS on an RTX 4060 Laptop GPU
+(`final_*.log`). First-use shader compilation causes one-off 100-150 ms hitches in the first seconds of a match.
+
+### Not done in the visual pass
+- The maps keep their measured Hot Return collision layouts (routes 120-152 m). Outer silhouettes are broken by
+  bastions, alcoves, piers and lobes, but the core route networks were not redrawn from scratch.
+- The first-person weapon follows the hand bone with camera-locked orientation, not IK; the left hand does not grip
+  each fore-end exactly, and ADS is an approximate offset rather than a sight-aligned pose.
+- Character clips come from a pistol aim set (the free animation library has no rifle set).
+- MSAA shows edge-dot artifacts with the toon shader on this renderer; FXAA is the default for that reason.
+- No dedicated ambience loop; the sea and machinery are silent beyond the existing cues.
+- Vector slings (launch pads) keep their previous visuals; no new charge or landing-indicator art.
+
+## Implemented and tested (Hot Return rebuild)
 
 | Area | What exists |
 |---|---|
