@@ -610,6 +610,8 @@ func rpc_muzzle(shooter_id: int, weapon: String) -> void:
 		if p.is_local():
 			p.kick_view()
 			p.eject_shell()
+			if p.fp_arms != null:
+				p.fp_arms.play_shoot()
 			Sfx.play(cue, -5.0, randf_range(0.98, 1.02))
 		else:
 			var d: float = local_player.global_position.distance_to(p.global_position) if local_player != null and is_instance_valid(local_player) else 30.0

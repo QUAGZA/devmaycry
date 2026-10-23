@@ -124,12 +124,15 @@ var viewmodel: Node3D
 var tag: Label3D
 var vm_mat: StandardMaterial3D
 var rig: TacticalRig
+var fp_arms: FPArms
 var _was_alive := true
 var _death_vis_t := 0.0
 var _was_reloading := false
 var _sway := Vector2.ZERO
 var _bob_t := 0.0
 var _vm_base := Vector3(0.21, -0.19, -0.4)
+const FP_BODY_OFFSET := Vector3(0.04, -1.56, 0.14)
+const FP_GRIP_OFFSET := Vector3(-0.035, -0.015, 0.0)
 var _step_dist := 0.0
 var _was_floor := true
 var _fall_speed := 0.0
@@ -228,6 +231,26 @@ func _vm_cyl(parent: Node3D, radius: float, height: float, pos: Vector3, mat: Ma
 ## Four original first-person weapon models built from parts (ink body, porcelain grips, brass/mint accents).
 func _build_viewmodel() -> void:
 	vm_mat = StandardMaterial3D.new()
+	# preferred: full first-person body from the character asset, weapons in the right hand
+	fp_arms = FPArms.new()
+	viewmodel.add_child(fp_arms)
+	fp_arms.build(Color(0.42, 0.45, 0.52))
+	if fp_arms.ok:
+		fp_arms.position = FP_BODY_OFFSET
+		_vm_base = Vector3.ZERO
+		for wid in Weapons.ORDER:
+			var w := WeaponModels.build(wid)
+			if w == null:
+				continue
+			w.name = wid
+			w.scale = Vector3.ONE * 0.32
+			w.position = FP_GRIP_OFFSET
+			w.visible = wid == weapon_id
+			fp_arms.weapon_root.add_child(w)
+			viewmodels[wid] = w
+		return
+	fp_arms.queue_free()
+	fp_arms = null
 	var sleeve := Style.surface("cloth", Color("3A4150"))
 	var cuff := Style.surface("gear", Color("2B2E2B"))
 	var glove := Style.surface("gear", Color("50473C"))
@@ -860,6 +883,8 @@ func _update_life_visuals(delta: float) -> void:
 	var reloading := reload_t > 0.0
 	if reloading and not _was_reloading:
 		rig.reload()
+		if fp_arms != null and _local:
+			fp_arms.play_reload()
 	_was_reloading = reloading
 	rig.set_weapon(weapon_id)
 
@@ -880,7 +905,7 @@ func _animate_viewmodel(delta: float) -> void:
 	_sway = _sway.lerp(look, minf(1.0, delta * 10.0))
 	var sway := Vector3(clampf(-dl.x * 0.25, -0.04, 0.04), clampf(dl.y * 0.25, -0.03, 0.03), 0.0)
 	var idle := Vector3(0.0, sin(Time.get_ticks_msec() * 0.0015) * 0.003, 0.0)
-	var base := Vector3(0.0, -0.13, -0.3) if ads else _vm_base
+	var base := (Vector3(0.0, -0.13, -0.3) if fp_arms == null else Vector3(-0.07, 0.03, 0.04)) if ads else _vm_base
 	var rl := 0.0
 	var rtime := float(Weapons.get_data(weapon_id)["reload"])
 	if reload_t > 0.0 and rtime > 0.0:
