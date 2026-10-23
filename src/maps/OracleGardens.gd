@@ -238,6 +238,9 @@ func _art_pass() -> void:
 			if not ResourceLoader.exists(MapDecor.NATURE + f):
 				f = "grass_large.glb"
 			MapDecor.place(deco, MapDecor.NATURE + f, Vector3(p.x - 3.5 + k * 1.7, 0.0, p.z + rng.randf_range(-0.8, 0.8)), 0.35, rng.randf() * 360.0, "foliage", Color(0.5, 0.66, 0.46))
+	# phase gates framed as ceremonial landmarks (visual only, wider than the portal ring)
+	for g in [[Vector3(-40, 0, 44), 0.0], [Vector3(40, 0, -44), 0.0], [Vector3(-40, 0, -44), 0.0], [Vector3(40, 0, 44), 0.0]]:
+		MapDecor.arch(deco, g[0], g[1], 6.4, 5.6, ivory, glaze)
 	MapDecor.dress_boxes(self)
 
 

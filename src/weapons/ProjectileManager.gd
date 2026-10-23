@@ -130,6 +130,8 @@ func on_hit(id: int, pos: Vector3, hit_id: int) -> void:
 	if live.has(id):
 		var w: String = live[id]["weapon"]
 		Game.shot_fx.emit(0, pos, pos, hit_id)
+		var fam: String = Game.map_def.family if Game.map_def != null else "oracle"
+		Sfx.play_at("impact_flesh" if hit_id != 0 else ("impact_metal" if fam != "oracle" and randf() < 0.5 else "impact_stone"), pos, -6.0)
 		if hit_id != 0:
 			Game.fx.emit("impact_player" if hit_id > -9999 else "impact", 0, pos)
 		else:

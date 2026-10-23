@@ -170,6 +170,7 @@ static func bastion(def: MapDef, corner: Vector3, yaw_deg: float, length: float,
 	_mesh(body, _boxm(Vector3(length, height, depth)), Vector3.ZERO, mat)
 	def.geometry.add_child(body)
 	body.add_to_group("navgeo")
+	def.footprints.append({"node": body, "w": length, "d": depth, "kind": "box"})
 	return body
 
 

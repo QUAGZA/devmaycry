@@ -78,10 +78,35 @@ func _ready() -> void:
 		if str(args["settings-test"]) == "write":
 			Settings.mouse_sensitivity = 0.0042
 			Settings.master_volume = 0.37
+			Settings.set_preset("medium")
+			Settings.window_mode = "borderless"
+			Settings.aa_mode = "taa"
 			Settings.save_prefs()
-			log_ev("Settings", "written", {"sens": Settings.mouse_sensitivity, "master": Settings.master_volume, "path": ProjectSettings.globalize_path(Settings.PATH)})
+			log_ev("Settings", "written", {"sens": Settings.mouse_sensitivity, "master": Settings.master_volume, "preset": Settings.preset, "window_mode": Settings.window_mode, "aa": Settings.aa_mode, "shadows": Settings.shadow_quality, "path": ProjectSettings.globalize_path(Settings.cfg_path)})
 		else:
-			log_ev("Settings", "read", {"sens": Settings.mouse_sensitivity, "master": Settings.master_volume})
+			log_ev("Settings", "read", {"sens": Settings.mouse_sensitivity, "master": Settings.master_volume, "preset": Settings.preset, "window_mode": Settings.window_mode, "aa": Settings.aa_mode, "shadows": Settings.shadow_quality, "textures": Settings.texture_quality, "effects": Settings.effects_quality})
+
+
+var _perf_t := 0.0
+var _perf_frames := 0
+var _perf_worst := 0.0
+
+
+## --perf: uncapped frame rate, logs average FPS, worst frame, draw calls and objects every 5 s.
+func _perf(delta: float) -> void:
+	if _perf_t == 0.0 and _perf_frames == 0:
+		Engine.max_fps = 0
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	_perf_t += delta
+	_perf_frames += 1
+	_perf_worst = maxf(_perf_worst, delta)
+	if _perf_t >= 5.0:
+		log_ev("Perf", "sample", {"map": map_id, "fps": snappedf(_perf_frames / _perf_t, 0.1), "worst_ms": snappedf(_perf_worst * 1000.0, 0.1),
+			"draw_calls": Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME), "objects": Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME),
+			"vram_mb": snappedf(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0, 1), "players": players.size(), "projectiles": projectiles.live.size() if projectiles != null else 0})
+		_perf_t = 0.0
+		_perf_frames = 0
+		_perf_worst = 0.0
 
 
 func _parse_args() -> void:
@@ -385,6 +410,8 @@ func _physics_process(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
+	if args.has("perf"):
+		_perf(delta)
 	if not _window_logged and DisplayServer.get_name() != "headless" and Time.get_ticks_msec() > 2500:
 		_window_logged = true
 		var ws := DisplayServer.window_get_size()
@@ -582,11 +609,15 @@ func rpc_muzzle(shooter_id: int, weapon: String) -> void:
 	if p != null and is_instance_valid(p):
 		if p.is_local():
 			p.kick_view()
+			p.eject_shell()
 			Sfx.play(cue, -5.0, randf_range(0.98, 1.02))
 		else:
 			var d: float = local_player.global_position.distance_to(p.global_position) if local_player != null and is_instance_valid(local_player) else 30.0
 			Sfx.play(cue, -10.0 - clampf(d / 6.0, 0.0, 18.0), randf_range(0.95, 1.05))
 		fx.emit("muzzle", shooter_id, p.muzzle_position())
+		if weapon == "rifle" or weapon == "mg" or weapon == "sniper":
+			var shell_pos: Vector3 = p.global_position + Vector3(0, 0.1, 0)
+			get_tree().create_timer(0.35).timeout.connect(func() -> void: Sfx.play_at("shell", shell_pos, -16.0 if p.is_local() else -12.0, 1.5))
 		if not p.is_local() and p.rig != null:
 			p.rig.fire()
 

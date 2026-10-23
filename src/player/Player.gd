@@ -130,6 +130,9 @@ var _was_reloading := false
 var _sway := Vector2.ZERO
 var _bob_t := 0.0
 var _vm_base := Vector3(0.21, -0.19, -0.4)
+var _step_dist := 0.0
+var _was_floor := true
+var _fall_speed := 0.0
 
 
 func _init() -> void:
@@ -820,6 +823,7 @@ func _process(delta: float) -> void:
 		_fov_target = float(Weapons.get_data(weapon_id)["ads_fov"]) if local_ads and alive else Settings.fov
 		cam.fov = lerpf(cam.fov, _fov_target, minf(1.0, 12.0 * delta))
 	_update_life_visuals(delta)
+	_update_footsteps(delta)
 	if viewmodel.visible:
 		_animate_viewmodel(delta)
 	if multiplayer.is_server():
@@ -891,6 +895,61 @@ func _animate_viewmodel(delta: float) -> void:
 			mag.position = (mag.get_meta("rest") as Vector3) + Vector3(0, -0.25 * rl, 0)
 	if switch_t > 0.0:
 		viewmodel.position.y -= switch_t * 0.4
+
+
+## Footsteps by surface, landing thuds. Runs on every peer for every visible player.
+func _update_footsteps(delta: float) -> void:
+	if not alive or DisplayServer.get_name() == "headless":
+		return
+	var on_ground := is_on_floor() if multiplayer.is_server() else (flags & F_FLOOR) != 0
+	var hv := Vector3(velocity.x, 0.0, velocity.z).length()
+	if on_ground and not _was_floor and _fall_speed > 6.0:
+		Sfx.play_at("land", global_position, -6.0 if _local else -2.0)
+	_was_floor = on_ground
+	_fall_speed = maxf(0.0, -velocity.y) if not on_ground else 0.0
+	if not on_ground or hv < 1.0 or crouching:
+		return
+	_step_dist += hv * delta
+	var stride := 2.6 if hv > 7.0 else 2.1
+	if _step_dist >= stride:
+		_step_dist = 0.0
+		Sfx.play_at(surface_sound(), global_position, (-14.0 if _local else -4.0) + (2.0 if hv > 7.0 else 0.0))
+
+
+## Surface family under the player: metal on raised decks and gantries of the industrial maps,
+## stone everywhere on Oracle Gardens, concrete otherwise.
+func surface_sound() -> String:
+	var fam: String = Game.map_def.family if Game.map_def != null else "oracle"
+	if fam != "oracle" and global_position.y > 2.0:
+		return "step_metal"
+	return "step_stone"
+
+
+## Brass case ejected from the first-person weapon: short arc to the right, spinning, then freed.
+func eject_shell() -> void:
+	if not _local or not viewmodel.visible or weapon_id == "shotgun":
+		return
+	var shell := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.006
+	cm.bottom_radius = 0.006
+	cm.height = 0.024
+	cm.radial_segments = 6
+	shell.mesh = cm
+	shell.material_override = Style.surface("metal", Palette.BRASS)
+	shell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	cam.add_child(shell)
+	var start := viewmodel.position + Vector3(0.02, 0.06, -0.12)
+	shell.position = start
+	shell.rotation = Vector3(randf() * TAU, 0, PI * 0.5)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	var side := Vector3(randf_range(0.18, 0.26), 0.0, randf_range(0.02, 0.08))
+	tw.tween_method(func(t: float) -> void:
+		if is_instance_valid(shell):
+			shell.position = start + side * t + Vector3(0, 0.14 * t - 0.5 * t * t, 0)
+			shell.rotate_x(0.5), 0.0, 1.0, 0.5)
+	tw.chain().tween_callback(shell.queue_free)
 
 
 ## World-space muzzle position for flashes: the real barrel tip for the local viewmodel.

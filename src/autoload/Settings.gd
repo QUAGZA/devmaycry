@@ -2,6 +2,8 @@ extends Node
 ## Input map, player preferences (saved to user://settings.cfg).
 
 const PATH := "user://settings.cfg"
+## Automated tests pass --settings-path=user://<file> so they never touch the player's real preferences.
+var cfg_path := PATH
 
 var mouse_sensitivity := 0.0022  # radians per pixel
 var master_volume := 1.0
@@ -22,6 +24,15 @@ const PRESETS := ["low", "medium", "high"]
 const FPS_CAPS := [30, 60, 120, 144, 0]
 var resolution := Vector2i(1920, 1080)
 var last_window_note := ""
+## Window and per-feature graphics options. A preset writes all four; each can then be overridden.
+var window_mode := "windowed"        # windowed / borderless / fullscreen
+var shadow_quality := "high"         # low / medium / high
+var aa_mode := "msaa4"               # off / fxaa / msaa2 / msaa4 / taa
+var texture_quality := "high"        # low (no detail maps) / high (Poly Haven detail maps)
+var effects_quality := "high"        # low (no ink, SSAO, glow, fog) / medium / high (halftone)
+const WINDOW_MODES := ["windowed", "borderless", "fullscreen"]
+const QUALITY := ["low", "medium", "high"]
+const AA_MODES := ["off", "fxaa", "msaa2", "msaa4", "taa"]
 const RESOLUTIONS := [Vector2i(1920, 1080), Vector2i(1600, 900), Vector2i(1366, 768), Vector2i(1280, 720)]
 
 
@@ -30,6 +41,9 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--settings-path="):
+			cfg_path = a.substr(16)
 	load_prefs()
 	if OS.has_environment("USERNAME") and player_name == "PLAYER":
 		player_name = OS.get_environment("USERNAME").to_upper().left(12)
@@ -77,7 +91,7 @@ func _bind_mouse(action: String, button: MouseButton) -> void:
 
 func load_prefs() -> void:
 	var cfg := ConfigFile.new()
-	if cfg.load(PATH) != OK:
+	if cfg.load(cfg_path) != OK:
 		return
 	mouse_sensitivity = float(cfg.get_value("input", "mouse_sensitivity", mouse_sensitivity))
 	master_volume = float(cfg.get_value("audio", "master", master_volume))
@@ -85,6 +99,11 @@ func load_prefs() -> void:
 	music_volume = float(cfg.get_value("audio", "music", music_volume))
 	player_name = str(cfg.get_value("player", "name", player_name))
 	fullscreen = bool(cfg.get_value("video", "fullscreen", fullscreen))
+	window_mode = str(cfg.get_value("video", "window_mode", "fullscreen" if fullscreen else "windowed"))
+	shadow_quality = str(cfg.get_value("video", "shadow_quality", shadow_quality))
+	aa_mode = str(cfg.get_value("video", "aa_mode", aa_mode))
+	texture_quality = str(cfg.get_value("video", "texture_quality", texture_quality))
+	effects_quality = str(cfg.get_value("video", "effects_quality", effects_quality))
 	resolution = Vector2i(int(cfg.get_value("video", "width", resolution.x)), int(cfg.get_value("video", "height", resolution.y)))
 	preset = str(cfg.get_value("video", "preset", preset))
 	max_fps = int(cfg.get_value("video", "max_fps", max_fps))
@@ -106,7 +125,13 @@ func save_prefs() -> void:
 	cfg.set_value("audio", "sfx", sfx_volume)
 	cfg.set_value("audio", "music", music_volume)
 	cfg.set_value("player", "name", player_name)
+	fullscreen = window_mode == "fullscreen"
 	cfg.set_value("video", "fullscreen", fullscreen)
+	cfg.set_value("video", "window_mode", window_mode)
+	cfg.set_value("video", "shadow_quality", shadow_quality)
+	cfg.set_value("video", "aa_mode", aa_mode)
+	cfg.set_value("video", "texture_quality", texture_quality)
+	cfg.set_value("video", "effects_quality", effects_quality)
 	cfg.set_value("video", "width", resolution.x)
 	cfg.set_value("video", "height", resolution.y)
 	cfg.set_value("video", "preset", preset)
@@ -119,7 +144,7 @@ func save_prefs() -> void:
 	cfg.set_value("input", "head_bob", head_bob)
 	for b in bus_volumes:
 		cfg.set_value("audio", b.to_lower(), bus_volumes[b])
-	cfg.save(PATH)
+	cfg.save(cfg_path)
 	apply_prefs()
 
 
@@ -129,8 +154,9 @@ func reset_defaults() -> void:
 	sfx_volume = 1.0
 	music_volume = 0.6
 	fullscreen = false
+	window_mode = "windowed"
 	resolution = Vector2i(1920, 1080)
-	preset = "high"
+	set_preset("high")
 	max_fps = 60
 	vsync = true
 	fov = 86.0
@@ -142,10 +168,15 @@ func reset_defaults() -> void:
 
 
 func snapshot() -> Dictionary:
-	return {"sens": mouse_sensitivity, "master": master_volume, "fullscreen": fullscreen, "resolution": resolution, "preset": preset, "max_fps": max_fps, "vsync": vsync, "fov": fov, "invert_y": invert_y, "reticle": reticle_size, "shake": shake, "head_bob": head_bob, "buses": bus_volumes.duplicate(), "name": player_name}
+	return {"window_mode": window_mode, "shadow_quality": shadow_quality, "aa_mode": aa_mode, "texture_quality": texture_quality, "effects_quality": effects_quality, "sens": mouse_sensitivity, "master": master_volume, "fullscreen": fullscreen, "resolution": resolution, "preset": preset, "max_fps": max_fps, "vsync": vsync, "fov": fov, "invert_y": invert_y, "reticle": reticle_size, "shake": shake, "head_bob": head_bob, "buses": bus_volumes.duplicate(), "name": player_name}
 
 
 func restore(snap: Dictionary) -> void:
+	window_mode = snap["window_mode"]
+	shadow_quality = snap["shadow_quality"]
+	aa_mode = snap["aa_mode"]
+	texture_quality = snap["texture_quality"]
+	effects_quality = snap["effects_quality"]
 	mouse_sensitivity = snap["sens"]
 	master_volume = snap["master"]
 	fullscreen = snap["fullscreen"]
@@ -167,30 +198,42 @@ func apply_graphics() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
 	var vp := get_viewport()
-	match preset:
-		"low":
-			RenderingServer.directional_shadow_atlas_set_size(1024, true)
-			vp.msaa_3d = Viewport.MSAA_DISABLED
-			vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
-			vp.scaling_3d_scale = 0.8
-		"medium":
-			RenderingServer.directional_shadow_atlas_set_size(2048, true)
-			vp.msaa_3d = Viewport.MSAA_2X
-			vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_DISABLED
-			vp.scaling_3d_scale = 1.0
-		_:
-			RenderingServer.directional_shadow_atlas_set_size(4096, true)
-			vp.msaa_3d = Viewport.MSAA_4X
-			vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_DISABLED
-			vp.scaling_3d_scale = 1.0
+	var shadow_size := {"low": 1024, "medium": 2048, "high": 4096}
+	RenderingServer.directional_shadow_atlas_set_size(int(shadow_size.get(shadow_quality, 4096)), true)
+	RenderingServer.directional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_SOFT_LOW if shadow_quality == "low" else (RenderingServer.SHADOW_QUALITY_SOFT_MEDIUM if shadow_quality == "medium" else RenderingServer.SHADOW_QUALITY_SOFT_HIGH))
+	vp.msaa_3d = {"msaa2": Viewport.MSAA_2X, "msaa4": Viewport.MSAA_4X}.get(aa_mode, Viewport.MSAA_DISABLED)
+	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA if aa_mode == "fxaa" else Viewport.SCREEN_SPACE_AA_DISABLED
+	vp.use_taa = aa_mode == "taa"
+	vp.scaling_3d_scale = 0.8 if preset == "low" else 1.0
 	Engine.max_fps = max_fps
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
 	if Game.world != null:
 		var we := Game.world.get_node_or_null("Env")
 		if we != null and we is WorldEnvironment:
-			we.environment.glow_enabled = preset != "low"
-			we.environment.fog_enabled = preset != "low"
-			we.environment.ssao_enabled = preset != "low"
+			we.environment.glow_enabled = effects_quality != "low"
+			we.environment.fog_enabled = effects_quality != "low"
+			we.environment.ssao_enabled = effects_quality != "low"
+
+
+## A preset writes every individual graphics option; they can then be changed one by one.
+func set_preset(p: String) -> void:
+	preset = p
+	match p:
+		"low":
+			shadow_quality = "low"
+			aa_mode = "fxaa"
+			texture_quality = "low"
+			effects_quality = "low"
+		"medium":
+			shadow_quality = "medium"
+			aa_mode = "msaa2"
+			texture_quality = "high"
+			effects_quality = "medium"
+		_:
+			shadow_quality = "high"
+			aa_mode = "msaa4"
+			texture_quality = "high"
+			effects_quality = "high"
 
 
 func glow_allowed() -> bool:
@@ -230,9 +273,16 @@ func apply_window() -> void:
 		if want.x > screen.x or want.y > screen.y:
 			want = screen
 		last_window_note = "Display is %dx%d, using %dx%d instead of %dx%d." % [screen.x, screen.y, want.x, want.y, resolution.x, resolution.y]
-	if fullscreen:
+	if window_mode == "fullscreen":
+		DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, false)
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	elif window_mode == "borderless":
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, true)
+		DisplayServer.window_set_size(screen)
+		DisplayServer.window_set_position(Vector2i.ZERO)
 	else:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, false)
 		DisplayServer.window_set_size(want)
 		DisplayServer.window_set_position((screen - want) / 2)

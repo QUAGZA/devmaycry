@@ -2,6 +2,13 @@ extends Node
 ## Match scene root: builds the selected arena into World, then reports readiness.
 
 
+## Map signage keeps a constant on-screen size: readable at range, never a wall of text up close.
+static func _fix_label(l: Label3D) -> void:
+	l.fixed_size = true
+	l.pixel_size = 0.0003 * clampf(float(l.font_size) / 40.0, 0.6, 1.3)
+	l.outline_size = maxi(l.outline_size, 8)
+
+
 func _ready() -> void:
 	var world := $World as Node3D
 	var def := Maps.make(Game.map_id)
@@ -9,11 +16,18 @@ func _ready() -> void:
 	def.bake_nav()
 	if DisplayServer.get_name() != "headless":
 		Settings.apply_graphics()
+		for l in world.find_children("*", "Label3D", true, false):
+			_fix_label(l as Label3D)
 	var objectives := Node.new()
 	objectives.name = "Objectives"
 	objectives.set_script(load("res://src/match/Objectives.gd"))
 	add_child(objectives)
 	Game.on_match_scene_ready(world, def)
+	if DisplayServer.get_name() != "headless":
+		get_tree().create_timer(0.8).timeout.connect(func() -> void:
+			for l in world.find_children("*", "Label3D", true, false):
+				if not (l.get_parent() is Player):
+					_fix_label(l as Label3D))
 
 
 var spec_cam: Camera3D = null

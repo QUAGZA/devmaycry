@@ -162,6 +162,20 @@ func _art_pass() -> void:
 	for zs in [-1.0, 1.0]:
 		MapDecor.strut(deco, Vector3(-70, 4.6, zs * 44.6), Vector3(70, 4.6, zs * 44.6), 0.22, steel)
 		MapDecor.strut(deco, Vector3(-70, 5.2, zs * 44.6), Vector3(70, 5.2, zs * 44.6), 0.14, paint)
+	# zipline anchor masts: lattice towers with hazard bands at both ends of every cable
+	var hazard := Style.surface("ceramic", Color("D99A2B"))
+	for z in [[Vector3(-36, 6.0, 34), Vector3(36, 6.0, 34)], [Vector3(4, 3.0, -6), Vector3(34, 0.3, -24)], [Vector3(-44, 0.0, -34), Vector3(-6, 3.0, -4)]]:
+		for end in z:
+			var e: Vector3 = end
+			var other: Vector3 = z[1] if end == z[0] else z[0]
+			var back := (e - other)
+			back.y = 0.0
+			back = back.normalized() * 1.4
+			var base := e + back
+			for o in [Vector3(0.5, 0, 0.5), Vector3(-0.5, 0, 0.5), Vector3(0.5, 0, -0.5), Vector3(-0.5, 0, -0.5)]:
+				MapDecor.strut(deco, base + o, base + o * 0.4 + Vector3(0, 5.2, 0), 0.07, steel)
+			MapDecor._mesh(deco, MapDecor._boxm(Vector3(1.3, 0.25, 1.3)), base + Vector3(0, 1.2, 0), hazard)
+			MapDecor._mesh(deco, MapDecor._boxm(Vector3(0.9, 0.5, 0.9)), base + Vector3(0, 5.3, 0), paint)
 	MapDecor.dress_boxes(self)
 
 

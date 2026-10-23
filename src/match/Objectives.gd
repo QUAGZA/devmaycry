@@ -3,6 +3,8 @@ extends Node
 ## planted-site pulse, Relic Rush shards and beacon. Reads Game.live / Game.state only.
 
 var core_mesh: Node3D = null
+var core_gyro: MeshInstance3D = null
+var core_state_mats: Array = []
 var core_label: Label3D = null
 var site_labels: Dictionary = {}
 var site_rings: Dictionary = {}
@@ -53,25 +55,82 @@ func _build() -> void:
 	core_shader = ShaderMaterial.new()
 	core_shader.shader = load("res://src/shaders/core.gdshader")
 	inner.material_override = core_shader
-	sm.radius = 0.45
-	sm.height = 0.9
+	sm.radius = 0.36
+	sm.height = 0.72
 	sm.radial_segments = 48
 	sm.rings = 24
 	core_mesh.add_child(inner)
-	for i in 2:
-		var ring := MeshInstance3D.new()
+	# Containment housing: smoked glass shell, brass cage ribs, graphite end caps with state rings,
+	# and a gyroscope band whose spin and colour follow the volatility state.
+	var shell := MeshInstance3D.new()
+	var shm := SphereMesh.new()
+	shm.radius = 0.56
+	shm.height = 1.12
+	shell.mesh = shm
+	var glass := StandardMaterial3D.new()
+	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass.albedo_color = Color(0.75, 0.9, 0.95, 0.16)
+	glass.roughness = 0.05
+	glass.metallic = 0.3
+	glass.rim_enabled = true
+	glass.rim = 0.8
+	glass.cull_mode = BaseMaterial3D.CULL_BACK
+	shell.material_override = glass
+	core_mesh.add_child(shell)
+	var brass := Style.surface("metal", Palette.BRASS)
+	var graphite := Style.surface("gear", Color("2C3036"))
+	for k in 6:
+		var a := k * TAU / 6.0
+		var rib := MeshInstance3D.new()
 		var tm := TorusMesh.new()
-		tm.inner_radius = 0.55 + i * 0.2
-		tm.outer_radius = 0.62 + i * 0.2
-		ring.mesh = tm
-		ring.rotation_degrees = Vector3(60 + i * 50, 0, i * 40)
-		var rm := StandardMaterial3D.new()
-		rm.albedo_color = Palette.PORCELAIN
-		rm.emission_enabled = true
-		rm.emission = Palette.MINT if i == 0 else Palette.VERMILION
-		rm.emission_energy_multiplier = 2.0
-		ring.material_override = rm
-		core_mesh.add_child(ring)
+		tm.inner_radius = 0.6
+		tm.outer_radius = 0.64
+		tm.rings = 32
+		rib.mesh = tm
+		rib.rotation = Vector3(PI * 0.5, a, 0)
+		rib.scale = Vector3(1, 1, 0.12)
+		rib.material_override = brass
+		core_mesh.add_child(rib)
+	for y in [-0.62, 0.62]:
+		var cap := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.34 if y > 0 else 0.42
+		cm.bottom_radius = 0.42 if y > 0 else 0.34
+		cm.height = 0.16
+		cm.radial_segments = 24
+		cap.mesh = cm
+		cap.position = Vector3(0, y, 0)
+		cap.material_override = graphite
+		core_mesh.add_child(cap)
+		var band := MeshInstance3D.new()
+		var bt := TorusMesh.new()
+		bt.inner_radius = 0.36
+		bt.outer_radius = 0.43
+		band.mesh = bt
+		band.position = Vector3(0, y * 0.88, 0)
+		var bm := StandardMaterial3D.new()
+		bm.albedo_color = Palette.MINT
+		bm.emission_enabled = true
+		bm.emission = Palette.MINT
+		bm.emission_energy_multiplier = 2.2
+		band.material_override = bm
+		core_mesh.add_child(band)
+		core_state_mats.append(bm)
+	core_gyro = MeshInstance3D.new()
+	var gt := TorusMesh.new()
+	gt.inner_radius = 0.74
+	gt.outer_radius = 0.8
+	gt.rings = 48
+	core_gyro.mesh = gt
+	core_gyro.rotation_degrees = Vector3(70, 0, 20)
+	var gm := StandardMaterial3D.new()
+	gm.albedo_color = Palette.PORCELAIN
+	gm.emission_enabled = true
+	gm.emission = Palette.MINT
+	gm.emission_energy_multiplier = 1.6
+	core_gyro.material_override = gm
+	core_state_mats.append(gm)
+	core_mesh.add_child(core_gyro)
 	core_label = Label3D.new()
 	core_label.text = "RESONANCE CORE"
 	core_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -291,6 +350,20 @@ func _update_hotreturn(delta: float) -> void:
 	core_mat.emission_energy_multiplier = 2.0 + 4.0 * k
 	core_shader.set_shader_parameter("volatility", k)
 	core_shader.set_shader_parameter("frozen", 1.0 if mode == "locked" else 0.0)
+	# state colour: stable mint, unstable signal orange, critical vermilion pulse, locked cobalt, stabilized porcelain
+	var state_col := Palette.MINT
+	if mode == "locked":
+		state_col = Palette.COBALT
+	elif mode == "stabilized":
+		state_col = Palette.PORCELAIN
+	elif k >= 0.75:
+		state_col = Palette.VERMILION.lerp(Color.WHITE, 0.5 + 0.5 * sin(_bob * 14.0))
+	elif k >= 0.4:
+		state_col = Color("E2683A")
+	for m in core_state_mats:
+		(m as StandardMaterial3D).emission = state_col
+	if core_gyro != null:
+		core_gyro.rotate_object_local(Vector3.UP, delta * (0.0 if mode == "locked" else 1.5 + 9.0 * k))
 	core_mesh.scale = Vector3.ONE * pulse
 	core_mesh.rotate_y(delta * (0.8 + 3.0 * k))
 	match mode:

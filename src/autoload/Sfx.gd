@@ -3,7 +3,15 @@ extends Node
 
 var _streams: Dictionary = {}
 var _players: Array[AudioStreamPlayer] = []
+var _players3d: Array[AudioStreamPlayer3D] = []
 const POOL := 8
+const POOL_3D := 16
+## Variation sets from the Kenney Impact Sounds pack (CC0), stored under res://assets/sfx/kenney.
+const SETS := {
+	"step_stone": "footstep_concrete", "step_metal": "impactPlate_light", "step_grass": "footstep_grass",
+	"land": "impactSoft_heavy", "shell": "impactMetal_light", "impact_stone": "impactGeneric_light",
+	"impact_metal": "impactMetal_heavy", "impact_flesh": "impactPunch_medium",
+}
 
 
 func _ready() -> void:
@@ -12,6 +20,47 @@ func _ready() -> void:
 		p.bus = "Master"
 		add_child(p)
 		_players.append(p)
+	for i in POOL_3D:
+		var q := AudioStreamPlayer3D.new()
+		q.unit_size = 6.0
+		q.max_distance = 70.0
+		q.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+		q.panning_strength = 0.8
+		add_child(q)
+		_players3d.append(q)
+
+
+## Positional one-shot (footsteps, impacts, shells). Picks a random variation for named sets.
+func play_at(name: String, pos: Vector3, volume_db: float = 0.0, pitch: float = 1.0) -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var stream: AudioStream = null
+	if SETS.has(name):
+		stream = _get_path("res://assets/sfx/kenney/%s_%03d.ogg" % [SETS[name], randi() % 5])
+	else:
+		stream = _get_stream(name)
+	if stream == null:
+		return
+	var best: AudioStreamPlayer3D = null
+	for q in _players3d:
+		if not q.playing:
+			best = q
+			break
+	if best == null:
+		best = _players3d[randi() % _players3d.size()]
+	best.stream = stream
+	best.bus = "Effects" if AudioServer.get_bus_index("Effects") >= 0 else "Master"
+	best.global_position = pos
+	best.volume_db = volume_db + linear_to_db(clampf(Settings.sfx_volume, 0.0001, 1.0))
+	best.pitch_scale = pitch * randf_range(0.94, 1.06)
+	best.play()
+
+
+func _get_path(path: String) -> AudioStream:
+	if _streams.has(path):
+		return _streams[path]
+	_streams[path] = load(path) if ResourceLoader.exists(path) else null
+	return _streams[path]
 
 
 func bus_for(name: String) -> String:

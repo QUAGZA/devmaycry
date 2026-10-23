@@ -72,7 +72,7 @@ func build(color: Color, glyph_text: String) -> void:
 	skel = model.find_child("Skeleton3D", true, false) as Skeleton3D
 	# suit: dark cloth through the toon shader, keeping the original texture as albedo
 	for mi: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
-		Style.restyle(mi, "cloth", Color(0.42, 0.45, 0.5))
+		Style.restyle(mi, "cloth", Color(0.5, 0.53, 0.6), 0.15)
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		_meshes.append(mi)
 	_dress()
@@ -143,6 +143,16 @@ func _dress() -> void:
 		_part(kn, _box(Vector3(0.12, 0.10, 0.08)), Vector3(0, 0.02, 0.07), Vector3.ZERO, plate)
 		var th := _attach("thigh_" + side)
 		_part(th, _box(Vector3(0.08, 0.14, 0.10)), Vector3(0.09 if side == "l" else -0.09, 0.18, 0), Vector3.ZERO, gear)
+	var boot := Style.surface("gear", Color("2A2622"))
+	for side in ["l", "r"]:
+		var ft := _attach("foot_" + side)
+		# UE mannequin foot bones run along local +Y toward the toes
+		_part(ft, _box(Vector3(0.12, 0.26, 0.13)), Vector3(0, 0.07, 0.0), Vector3.ZERO, boot)
+		_part(ft, _box(Vector3(0.13, 0.28, 0.035)), Vector3(0, 0.07, -0.07), Vector3.ZERO, plate)
+		var hd := _attach("hand_" + side)
+		_part(hd, _box(Vector3(0.09, 0.1, 0.05)), Vector3(0, 0.04, 0), Vector3.ZERO, boot)
+		var fa := _attach("lowerarm_" + side)
+		_part(fa, _box(Vector3(0.1, 0.08, 0.1)), Vector3(0, 0.2, 0), Vector3.ZERO, plate)
 	hand_attach = _attach("hand_r")
 	weapon_holder = Node3D.new()
 	hand_attach.add_child(weapon_holder)
@@ -266,7 +276,7 @@ func set_weapon(id: String) -> void:
 	# hand_r local: grip at the palm, barrel along the forearm direction, tuned against the aim pose
 	w.position = Vector3(0.0, 0.1, 0.05)
 	w.rotation_degrees = Vector3(0, -90, -90)
-	w.scale = Vector3.ONE * 1.0
+	w.scale = Vector3.ONE * 0.72
 
 
 func fire() -> void:

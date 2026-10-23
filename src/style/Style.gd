@@ -30,11 +30,20 @@ static var _tex: Dictionary = {}
 static var _outline_slot := 0
 
 
-static func quality() -> String:
+static func _setting(key: String, fallback: String) -> String:
 	if Engine.get_main_loop() == null:
-		return "high"
+		return fallback
 	var s = Engine.get_main_loop().root.get_node_or_null("/root/Settings")
-	return str(s.preset) if s != null else "high"
+	return str(s.get(key)) if s != null else fallback
+
+
+## Effects quality: ink outline and halftone. Texture quality: detail maps.
+static func quality() -> String:
+	return _setting("effects_quality", "high")
+
+
+static func textures_on() -> bool:
+	return _setting("texture_quality", "high") != "low"
 
 
 static func _texture(path: String) -> Texture2D:
@@ -63,7 +72,7 @@ static func surface(kind: String, color: Color, emissive: Color = Color.BLACK, e
 	m.set_shader_parameter("wear", 0.5)
 	m.set_shader_parameter("noise_intensity", 0.45 if albedo_tex == null else 0.15)
 	m.set_shader_parameter("shade_tint", Color("4A5A8C"))
-	if str(k[0]) != "" and q != "low":
+	if str(k[0]) != "" and textures_on():
 		m.set_shader_parameter("detail_albedo", _texture(DETAIL + str(k[0]) + "_col.jpg"))
 		m.set_shader_parameter("detail_normal", _texture(DETAIL + str(k[0]) + "_nrm.jpg"))
 		m.set_shader_parameter("use_detail", 1.0)

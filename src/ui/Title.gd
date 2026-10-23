@@ -19,7 +19,7 @@ func _ready() -> void:
 	add_child(bg)
 	if DisplayServer.get_name() != "headless":
 		var hero := MainMenu3D.new()
-		hero.size = Vector2i(1280, 720)
+		hero.size = Vector2i(1920, 1080)
 		add_child(hero)
 		var hero_tex := TextureRect.new()
 		hero_tex.texture = hero.get_texture()
@@ -27,10 +27,24 @@ func _ready() -> void:
 		hero_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		hero_tex.stretch_mode = TextureRect.STRETCH_SCALE
 		hero_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hero_tex.modulate = Color(1, 1, 1, 0.85)
+		hero_tex.modulate = Color(1, 1, 1, 1.0)
 		add_child(hero_tex)
 		var shade := ColorRect.new()
-		shade.color = Color(Palette.INK, 0.55)
+		var grad := Gradient.new()
+		grad.set_color(0, Color(Palette.INK, 0.86))
+		grad.set_color(1, Color(Palette.INK, 0.05))
+		grad.add_point(0.42, Color(Palette.INK, 0.55))
+		var gt := GradientTexture2D.new()
+		gt.gradient = grad
+		gt.fill_to = Vector2(1, 0)
+		var shade_tex := TextureRect.new()
+		shade_tex.texture = gt
+		shade_tex.set_anchors_preset(Control.PRESET_FULL_RECT)
+		shade_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		shade_tex.stretch_mode = TextureRect.STRETCH_SCALE
+		shade_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(shade_tex)
+		shade.color = Color(Palette.INK, 0.0)
 		shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 		shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(shade)
@@ -70,6 +84,8 @@ func _ready() -> void:
 		if Game.menu_message != "":
 			_set_status(Game.menu_message, Palette.BRASS)
 			Game.menu_message = ""
+		if Game.args.has("open-settings"):
+			_screen_settings()
 	_handle_cli()
 
 
@@ -215,16 +231,22 @@ func _line(label: String, placeholder: String, value: String = "") -> LineEdit:
 # ---------------------------------------------------------------- screens
 func _screen_main() -> void:
 	_clear()
-	column.add_child(UiTheme.stamp("HACKATHON BUILD / ARCHIVE SPORTS DIVISION / FRAME 001", Palette.VERMILION, 14))
-	column.add_child(UiTheme.label("ECHO\nCLASH", 96, Palette.PORCELAIN, UiTheme.display_font()))
+	column.add_child(UiTheme.stamp("PALIMPSEST  /  ARCHITECTURE OF BROKEN TIME", Palette.VERMILION, 14))
+	var logo := UiTheme.label("ECHO" + char(10) + "CLASH", 104, Palette.PORCELAIN, UiTheme.display_font())
+	logo.add_theme_color_override("font_outline_color", Palette.INK)
+	logo.add_theme_constant_override("outline_size", 14)
+	logo.add_theme_color_override("font_shadow_color", Color(Palette.VERMILION, 0.55))
+	logo.add_theme_constant_override("shadow_offset_x", 6)
+	logo.add_theme_constant_override("shadow_offset_y", 5)
+	column.add_child(logo)
 	column.add_child(UiTheme.stamp("THE ARENA REMEMBERS.", Palette.MINT, 20))
 	column.add_child(UiTheme.rule(Palette.STONE))
-	_button("PLAY", func() -> void: _screen_setup(false))
-	_button("LAN ROOMS", func() -> void: _screen_join())
-	_button("PRACTICE", func() -> void: _screen_setup(true))
+	_button("PLAY", func() -> void: _screen_setup(true))
+	_button("HOST LAN GAME", func() -> void: _screen_setup(false))
+	_button("JOIN LAN GAME", func() -> void: _screen_join())
 	_button("SETTINGS", func() -> void: _screen_settings())
-	_button("CREDITS / ABOUT", func() -> void: _screen_credits())
-	_button("QUIT", func() -> void: get_tree().quit())
+	_button("CREDITS / ASSETS", func() -> void: _screen_credits())
+	_button("EXIT", func() -> void: get_tree().quit())
 	column.add_child(UiTheme.rule(Palette.STONE))
 	column.add_child(UiTheme.label("Room codes work on the same LAN / Wi-Fi only. There is no internet matchmaking in this build.", 14, Palette.STONE, UiTheme.serif_font()))
 	_status_line()
@@ -407,11 +429,31 @@ func _screen_settings() -> void:
 	res_names.append("NATIVE %d x %d" % [native.x, native.y])
 	res_list.append(native)
 	var cur := res_list.find(Settings.resolution)
+	var main_col := column
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 48)
+	main_col.add_child(cols)
+	var left := VBoxContainer.new()
+	left.add_theme_constant_override("separation", 8)
+	cols.add_child(left)
+	var right := VBoxContainer.new()
+	right.add_theme_constant_override("separation", 8)
+	cols.add_child(right)
+	column = left
+	left.add_child(UiTheme.stamp("DISPLAY / GRAPHICS", Palette.VERMILION, 13))
 	_option("RESOLUTION", res_names, maxi(cur, 0), func(i: int) -> void: Settings.resolution = res_list[i])
-	_check("FULLSCREEN", Settings.fullscreen, func(v: bool) -> void: Settings.fullscreen = v)
-	_option("GRAPHICS PRESET", ["LOW", "MEDIUM", "HIGH"], Settings.PRESETS.find(Settings.preset), func(i: int) -> void: Settings.preset = Settings.PRESETS[i])
+	_option("WINDOW MODE", ["WINDOWED", "BORDERLESS", "FULLSCREEN"], maxi(Settings.WINDOW_MODES.find(Settings.window_mode), 0), func(i: int) -> void: Settings.window_mode = Settings.WINDOW_MODES[i])
+	_option("GRAPHICS PRESET", ["LOW", "MEDIUM", "HIGH"], Settings.PRESETS.find(Settings.preset), func(i: int) -> void:
+		Settings.set_preset(Settings.PRESETS[i])
+		_screen_settings())
+	_option("SHADOW QUALITY", ["LOW", "MEDIUM", "HIGH"], maxi(Settings.QUALITY.find(Settings.shadow_quality), 0), func(i: int) -> void: Settings.shadow_quality = Settings.QUALITY[i])
+	_option("ANTI-ALIASING", ["OFF", "FXAA", "MSAA 2X", "MSAA 4X", "TAA"], maxi(Settings.AA_MODES.find(Settings.aa_mode), 0), func(i: int) -> void: Settings.aa_mode = Settings.AA_MODES[i])
+	_option("TEXTURE QUALITY", ["LOW (NO DETAIL MAPS)", "HIGH"], 0 if Settings.texture_quality == "low" else 1, func(i: int) -> void: Settings.texture_quality = "low" if i == 0 else "high")
+	_option("EFFECTS QUALITY", ["LOW", "MEDIUM", "HIGH"], maxi(Settings.QUALITY.find(Settings.effects_quality), 0), func(i: int) -> void: Settings.effects_quality = Settings.QUALITY[i])
 	_option("FRAME CAP", ["30", "60", "120", "144", "UNLIMITED"], maxi(Settings.FPS_CAPS.find(Settings.max_fps), 1), func(i: int) -> void: Settings.max_fps = Settings.FPS_CAPS[i])
 	_check("VSYNC", Settings.vsync, func(v: bool) -> void: Settings.vsync = v)
+	column = right
+	right.add_child(UiTheme.stamp("CONTROLS / AUDIO", Palette.VERMILION, 13))
 	_slider("MOUSE SENSITIVITY", 0.0005, 0.006, 0.0001, Settings.mouse_sensitivity, func(v: float) -> void: Settings.mouse_sensitivity = v)
 	_slider("FIELD OF VIEW", 70.0, 105.0, 1.0, Settings.fov, func(v: float) -> void: Settings.fov = v)
 	_check("INVERT Y", Settings.invert_y, func(v: bool) -> void: Settings.invert_y = v)
@@ -422,6 +464,7 @@ func _screen_settings() -> void:
 	for b in ["Music", "Weapons", "Effects", "Ambience", "UI"]:
 		var bus_name: String = b
 		_slider(bus_name.to_upper() + " VOLUME", 0.0, 1.0, 0.05, float(Settings.bus_volumes[bus_name]), func(v: float) -> void: Settings.bus_volumes[bus_name] = v)
+	column = main_col
 	column.add_child(UiTheme.rule(Palette.STONE))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
@@ -431,6 +474,7 @@ func _screen_settings() -> void:
 	apply.pressed.connect(func() -> void:
 		Settings.save_prefs()
 		Settings.apply_window()
+		Settings.apply_graphics()
 		_set_status("Settings applied and saved." + (" " + Settings.last_window_note if Settings.last_window_note != "" else ""), Palette.MINT))
 	row.add_child(apply)
 	var revert := Button.new()
@@ -448,8 +492,15 @@ func _screen_settings() -> void:
 		_screen_settings()
 		_set_status("Defaults restored. Press APPLY to keep them.", Palette.BRASS))
 	row.add_child(reset)
-	_button("CONTROLS", func() -> void: _screen_controls())
-	_button("BACK", func() -> void: _screen_main())
+	var nav_row := HBoxContainer.new()
+	nav_row.add_theme_constant_override("separation", 12)
+	column.add_child(nav_row)
+	for pair in [["CONTROLS", func() -> void: _screen_controls()], ["BACK", func() -> void: _screen_main()]]:
+		var nb := Button.new()
+		nb.text = pair[0]
+		nb.custom_minimum_size = Vector2(200, 44)
+		nb.pressed.connect(pair[1])
+		nav_row.add_child(nb)
 	_status_line()
 
 
@@ -464,8 +515,8 @@ func _screen_controls() -> void:
 
 func _screen_credits() -> void:
 	_clear()
-	_header("CREDITS / ABOUT", "THE ARENA REMEMBERS")
-	column.add_child(UiTheme.label("ECHO CLASH is a hackathon build in Godot 4.7.2. Everything in the arena is generated in code: geometry, materials, shaders, sounds, player figures and UI. Identity: PALIMPSEST / ARCHITECTURE OF BROKEN TIME.\n\nHot Return: attackers steal the Causal Core and carry it home before it detonates. Attackers reverse their own recent route (Reverse Entropy); defenders accelerate local entropy (Fast-Forward). Each ability is once per round, no cooldown.\n\nRelic Rush: five-minute free-for-all with Memory Shards and a rotating Relay Beacon.\n\nLAN only: room codes resolve on the same network. No accounts, no telemetry, no internet matchmaking.", 15, Palette.PORCELAIN, UiTheme.serif_font()))
+	_header("CREDITS / ASSETS", "THE ARENA REMEMBERS")
+	column.add_child(UiTheme.label("ECHO CLASH is a hackathon build in Godot 4.7.2. Identity: PALIMPSEST / ARCHITECTURE OF BROKEN TIME. Game code, map layouts, shaders (toon surface, ink outline, Core, fields, portals, sea), procedural sounds and UI are original to this project." + char(10) + char(10) + "THIRD-PARTY ASSETS (all CC0, no attribution required, credited with thanks):" + char(10) + "Quaternius: Universal Base Characters, Universal Animation Library (quaternius.com)" + char(10) + "Kenney: Blaster Kit, Nature Kit, Space Station Kit, Impact Sounds (kenney.nl)" + char(10) + "Poly Haven: sandstone_cracks, painted_plaster_wall, worn_tile_floor, metal_plate, rusty_metal_02, castle_wall_slates, concrete_floor_worn_001 (polyhaven.com)" + char(10) + char(10) + "Hot Return: steal the Causal Core and carry it home before it detonates. Reverse Entropy / Fast-Forward, once per round. Relic Rush: five-minute free-for-all. LAN only: no accounts, no telemetry, no internet matchmaking. Full list: ASSET_REGISTER.md", 15, Palette.PORCELAIN, UiTheme.serif_font()))
 	column.get_child(column.get_child_count() - 1).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.get_child(column.get_child_count() - 1).custom_minimum_size = Vector2(620, 0)
 	_button("BACK", func() -> void: _screen_main())

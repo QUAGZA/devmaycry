@@ -32,9 +32,14 @@ func _ready() -> void:
 	var cam := Camera3D.new()
 	cam.fov = 50
 	add_child(cam)
-	cam.look_at_from_position(Vector3(1.0, 2.6, -7.5), Vector3(1.0, 1.0, 0.5), Vector3.UP)
+	var close := OS.get_cmdline_user_args().has("--close")
+	if close:
+		cam.look_at_from_position(Vector3(0.4, 1.5, -1.6), Vector3(-0.2, 1.15, 1.6), Vector3.UP)
+	else:
+		cam.look_at_from_position(Vector3(1.0, 2.6, -7.5), Vector3(1.0, 1.0, 0.5), Vector3.UP)
 	cam.current = true
-	Style.add_outline(cam)
+	if not OS.get_cmdline_user_args().has("--nooutline"):
+		Style.add_outline(cam)
 	var floor_mi := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(40, 20)
