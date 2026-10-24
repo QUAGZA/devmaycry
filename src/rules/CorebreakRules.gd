@@ -5,11 +5,8 @@ extends RefCounted
 ## Round win priority (resolved once on the server, in this order):
 ##   1. detonation      -> attackers
 ##   2. defuse          -> defenders
-##   3. eliminations    -> defenders dead: attackers win (planted or not)
-##                         attackers dead and NOT planted: defenders win
-##                         attackers dead and planted: round continues (defenders may defuse)
-##                         both dead: planted -> attackers, else defenders
-##   4. timer at zero   -> defenders, only if the Core was never planted
+##   3. timer at zero   -> defenders, only if the Core was never planted
+## Eliminations never decide a round: dead players respawn after RESPAWN_DELAY with spawn protection.
 ##
 ## Match: 4 regulation rounds, sides swap after round 2, first to 3 wins. 2-2 -> overtime in pairs;
 ## each team attacks once per pair, the first attacker alternates between pairs; a split pair keeps
@@ -25,14 +22,7 @@ static func resolve(s: Dictionary) -> String:
 	if bool(s.get("defused", false)):
 		return "defend:defuse"
 	var planted := bool(s.get("planted", false))
-	var attackers := int(s.get("attackers_alive", 0))
-	var defenders := int(s.get("defenders_alive", 0))
-	if attackers == 0 and defenders == 0:
-		return "attack:eliminated" if planted else "defend:eliminated"
-	if defenders == 0:
-		return "attack:eliminated"
-	if attackers == 0 and not planted:
-		return "defend:eliminated"
+	# Squads respawn, so wiping out the other team (or both together) never decides a round.
 	if float(s.get("time_left", 1.0)) <= 0.0 and not planted:
 		return "defend:timer"
 	return ""

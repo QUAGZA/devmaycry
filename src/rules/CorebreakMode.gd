@@ -49,7 +49,7 @@ func role_of(team: int) -> String:
 
 
 func spawn_protection() -> float:
-	return 0.0
+	return Player.RESPAWN_PROTECT
 
 
 # ---------------------------------------------------------------- round flow
@@ -231,12 +231,9 @@ func _alive_counts() -> Dictionary:
 func _check_result() -> void:
 	if phase != "live" and phase != "planted":
 		return
-	var ac := _alive_counts()
 	var r := CorebreakRules.resolve({
 		"detonated": phase == "planted" and detonate_t <= 0.0,
 		"defused": defused_by != 0,
-		"attackers_alive": ac["attack"],
-		"defenders_alive": ac["defend"],
 		"time_left": time_left if phase == "live" else 1.0,
 		"planted": phase == "planted",
 	})
@@ -308,6 +305,8 @@ func on_player_died(victim: Player, _killer_id: int, _cause: String) -> void:
 	if defuse_player == victim.id:
 		defuse_progress = 0.0
 		defuse_player = 0
+	if phase == "live" or phase == "planted":
+		ms.queue_respawn(victim.id, MatchServer.RESPAWN_DELAY)
 	_check_result()
 
 

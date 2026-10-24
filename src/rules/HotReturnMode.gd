@@ -333,12 +333,9 @@ func _alive_counts() -> Dictionary:
 func _check_result() -> void:
 	if phase != "live":
 		return
-	var ac := {"attack": 1, "defend": 1}   # respawns: a squad wiped out for a moment does not end the round
 	var r := HotReturnRules.resolve({
 		"detonated": bool(core["detonated"]),
 		"stabilized": bool(core["stabilized"]),
-		"attackers_alive": ac["attack"],
-		"defenders_alive": ac["defend"],
 		"time_left": time_left,
 	})
 	if r != "":
