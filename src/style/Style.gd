@@ -30,6 +30,11 @@ static var _tex: Dictionary = {}
 static var _outline_slot := 0
 
 
+## Drops cached materials so the next build picks up a changed effects or texture quality.
+static func clear_cache() -> void:
+	_cache.clear()
+
+
 static func _setting(key: String, fallback: String) -> String:
 	if Engine.get_main_loop() == null:
 		return fallback

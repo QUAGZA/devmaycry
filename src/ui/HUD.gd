@@ -734,7 +734,7 @@ func _update_hotreturn_live(p: Player) -> void:
 		"carried":
 			txt = "CORE / %s CARRYING / %d%%" % [str(core.get("carrier_name", "")), int(v)]
 		"dropped":
-			txt = "CORE / DROPPED / %d%% TICKING" % int(v)
+			txt = "CORE / DROPPED / %d%% PAUSED" % int(v)
 		"locked":
 			var ll := float(core.get("lock_left", 0.0))
 			txt = "CORE / TEMPORAL LOCK / %d%% FROZEN%s" % [int(v), (" / %0.1f s" % ll) if ll > 0.0 else " / PICK UP"]

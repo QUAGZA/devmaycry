@@ -446,7 +446,7 @@ func _decide_hotreturn(rules) -> void:
 		if mode == "stabilized" or mode == "detonated":
 			return
 		_set_goal(core_pos + _orbit_offset(3.0), "chase")
-		var ticking := mode == "carried" or mode == "dropped"
+		var ticking := mode == "carried"   # a dropped Core is paused, so Fast-Forward would do nothing
 		if ticking and not p.ff_spent and p.global_position.distance_to(core_pos) < 7.0:
 			var chance: float = {"easy": 0.15, "medium": 0.45, "hard": 0.8}.get(difficulty, 0.4)
 			if rng.randf() < chance:

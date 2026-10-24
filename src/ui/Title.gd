@@ -822,7 +822,7 @@ func _screen_controls() -> void:
 	_begin("controls", 860.0)
 	_back = func() -> void: _screen_settings()
 	_header("CONTROLS", "Input map")
-	var controls := UiTheme.label("WASD  move               MOUSE      aim\nLMB   fire               RMB        aim down sights\n1 2 / WHEEL  switch your two weapons   B  armory (pre-round)\nR     reload             SHIFT      sprint\nSPACE jump               C          crouch\nCTRL  dash               E          pick up / interact / zipline (hold)\nQ     entropy ability (attack: Reverse  ·  defend: Fast-Forward)  once per round\nCAPS LOCK tactical map   TAB        scoreboard\nESC   pause", 17, UiTheme.TEXT, UiTheme.mono_font())
+	var controls := UiTheme.label("WASD  move               MOUSE      aim\nLMB   fire               RMB        aim down sights\n1 2 / WHEEL  switch your two weapons   B  armory (pre-round)\nR     reload             SHIFT      sprint\nSPACE jump               C          crouch\nCTRL  dash               E          pick up / interact / zipline (hold)\nG     drop the Core (carrier)\nQ     entropy ability (attack: Reverse  ·  defend: Fast-Forward)  once per round\nCAPS LOCK tactical map   TAB        scoreboard\nESC   pause", 17, UiTheme.TEXT, UiTheme.mono_font())
 	column.add_child(controls)
 	_button("BACK", func() -> void: _screen_settings())
 	_status_line()

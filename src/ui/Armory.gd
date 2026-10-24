@@ -218,6 +218,7 @@ func _make_preview(wid: String) -> Control:
 	vp.transparent_bg = true
 	vp.size = Vector2i(int(CARD_W - 28), 112)
 	vp.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
+	vp.positional_shadow_atlas_size = 0   # no omni/spot shadows in a preview: skip allocating the atlas
 	vpc.add_child(vp)
 	var model := WeaponModels.build(wid)
 	if model != null:

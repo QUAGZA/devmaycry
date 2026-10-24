@@ -69,6 +69,7 @@ func _setup_input_map() -> void:
 	_bind_key("map", KEY_CAPSLOCK)
 	_bind_mouse("ads", MOUSE_BUTTON_RIGHT)
 	_bind_key("interact", KEY_E)
+	_bind_key("drop_core", KEY_G)
 	_bind_key("reload", KEY_R)
 	_bind_key("pause", KEY_ESCAPE)
 	_bind_key("scoreboard", KEY_TAB)
@@ -224,7 +225,9 @@ func apply_graphics() -> void:
 	vp.msaa_3d = {"msaa2": Viewport.MSAA_2X, "msaa4": Viewport.MSAA_4X}.get(aa_mode, Viewport.MSAA_DISABLED)
 	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA if aa_mode == "fxaa" else Viewport.SCREEN_SPACE_AA_DISABLED
 	vp.use_taa = aa_mode == "taa"
-	vp.scaling_3d_scale = 0.8 if preset == "low" else 1.0
+	vp.scaling_3d_scale = render_scale()
+	# materials bake the effects/texture quality when they are built, so a changed setting needs a fresh cache
+	Style.clear_cache()
 	Game.log_ev("Settings", "graphics_applied", {"preset": preset, "aa": aa_mode, "msaa": vp.msaa_3d, "ssaa": vp.screen_space_aa, "taa": vp.use_taa, "shadows": shadow_quality, "effects": effects_quality, "textures": texture_quality, "scale": vp.scaling_3d_scale, "cfg": cfg_path})
 	Engine.max_fps = max_fps
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
@@ -286,29 +289,48 @@ static func cli_overrides_window() -> bool:
 	return false
 
 
-## Applies the chosen resolution; falls back to the largest preset that fits the screen.
-func apply_window() -> void:
-	var screen := DisplayServer.screen_get_size()
+## The chosen resolution, or the largest preset that fits the screen when it does not.
+func _fit_resolution(screen: Vector2i) -> Vector2i:
 	var want := resolution
-	last_window_note = ""
 	if want.x > screen.x or want.y > screen.y:
 		for r in RESOLUTIONS:
 			if r.x <= screen.x and r.y <= screen.y:
-				want = r
-				break
-		if want.x > screen.x or want.y > screen.y:
-			want = screen
+				return r
+		return screen
+	return want
+
+
+## 3D render scale: the graphics preset times the chosen resolution relative to the screen. A fullscreen or
+## borderless window always covers the whole screen, so a lower resolution there means rendering the 3D scene
+## smaller and upscaling it (the UI stays sharp). In a window the window itself is resized, so no extra scale.
+func render_scale() -> float:
+	var s := 0.8 if preset == "low" else 1.0
+	if DisplayServer.get_name() != "headless" and window_mode != "windowed":
+		var screen := DisplayServer.screen_get_size()
+		s *= clampf(float(_fit_resolution(screen).y) / float(maxi(screen.y, 1)), 0.25, 1.0)
+	return s
+
+
+## Applies the window mode and resolution; falls back to the largest preset that fits the screen.
+func apply_window() -> void:
+	var screen := DisplayServer.screen_get_size()
+	var want := _fit_resolution(screen)
+	last_window_note = ""
+	if want != resolution:
 		last_window_note = "Display is %dx%d, using %dx%d instead of %dx%d." % [screen.x, screen.y, want.x, want.y, resolution.x, resolution.y]
+	get_viewport().scaling_3d_scale = render_scale()
 	if window_mode == "fullscreen":
 		DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, false)
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-	elif window_mode == "borderless":
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		return
+	# leaving fullscreen is asynchronous: size and position are only honoured once the mode switch has landed
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	await get_tree().process_frame
+	if window_mode == "borderless":
 		DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, true)
 		DisplayServer.window_set_size(screen)
 		DisplayServer.window_set_position(Vector2i.ZERO)
 	else:
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, false)
 		DisplayServer.window_set_size(want)
 		DisplayServer.window_set_position((screen - want) / 2)

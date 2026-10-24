@@ -21,6 +21,10 @@ var ff_field := {"active": false, "pos": Vector3.ZERO, "until": 0.0, "owner": 0}
 var result := ""
 var last_result_reason := ""
 var _was_in_field := false
+## After pressing G the dropper cannot re-grab the Core for this long (otherwise it would be picked straight back up).
+const DROP_REGRAB_LOCK := 1.5
+var _drop_lock_id := 0
+var _drop_lock_until := 0.0
 
 
 func _init(server: MatchServer) -> void:
@@ -157,6 +161,8 @@ func _step_core(delta: float) -> void:
 					continue
 				if role_of(p.team) != "attack":
 					continue
+				if p.id == _drop_lock_id and ms.match_time < _drop_lock_until:
+					continue
 				var cp: Vector3 = core["pos"]
 				if Vector2(p.global_position.x - cp.x, p.global_position.z - cp.z).length() <= HotReturnRules.PICKUP_RADIUS and absf(p.global_position.y - cp.y) < 3.0:
 					_pickup(p)
@@ -173,7 +179,9 @@ func _step_core(delta: float) -> void:
 				_stabilize(c)
 				return
 	mode = str(core["mode"])
-	var ticking := mode == "carried" or mode == "dropped"
+	# volatility only runs while somebody is carrying the Core: a dropped, locked or cradled Core is paused, and
+	# neither Reverse Entropy nor Fast-Forward can change it until it is picked up again
+	var ticking := mode == "carried"
 	if ticking:
 		var pos: Vector3 = core["pos"]
 		var fi := _field_index_at(pos)
@@ -214,6 +222,8 @@ func c_valid() -> bool:
 
 
 func _pickup(p: Player) -> void:
+	if role_of(p.team) != "attack":
+		return   # defenders can never take, carry or stabilize the Core, whichever path calls this
 	var was := str(core["mode"])
 	core["mode"] = "carried"
 	core["carrier"] = p.id
@@ -237,10 +247,23 @@ func _drop_core(c, locked: bool) -> void:
 	core["carrier_name"] = ""
 	core["mode"] = "locked" if locked else "dropped"
 	if not locked:
-		Game.rpc_notice.rpc("THE CORE WAS DROPPED  ·  STILL TICKING", 2.0)
+		Game.rpc_notice.rpc("THE CORE WAS DROPPED  ·  VOLATILITY PAUSED", 2.0)
 	Game.rpc_fx.rpc("core_drop", 0, core["pos"])
 	Game.log_ev("Objective", "drop", {"locked": locked, "v": snappedf(float(core["v"]), 0.1)})
 	ms.push_state()
+
+
+## G: the carrier puts the Core down where they stand. Volatility pauses; any attacker (not the dropper for a
+## moment) can pick it up again.
+func request_drop(p: Player) -> void:
+	if phase != "live" or not p.alive or p.frozen:
+		return
+	if str(core["mode"]) != "carried" or int(core["carrier"]) != p.id:
+		return
+	_drop_lock_id = p.id
+	_drop_lock_until = ms.match_time + DROP_REGRAB_LOCK
+	_drop_core(p, false)
+	Game.log_ev("Objective", "voluntary_drop", {"id": p.id, "v": snappedf(float(core["v"]), 0.1)})
 
 
 func _stabilize(c: Player) -> void:

@@ -33,6 +33,8 @@ func _ready() -> void:
 	var def := Maps.make(Game.map_id)
 	def.build(world)
 	def.bake_nav()
+	if PerfPass.enabled():
+		PerfPass.apply(world, def)
 	if DisplayServer.get_name() != "headless":
 		Settings.apply_graphics()
 		for l in world.find_children("*", "Label3D", true, false):

@@ -38,7 +38,7 @@ static func resolve(s: Dictionary) -> String:
 
 
 ## Advances volatility for one tick. Returns {"v": new value, "used": field allowance consumed}.
-## ticking: Core is carried or normally dropped (not in cradle, not temporally locked).
+## ticking: Core is being carried (a dropped, cradled or temporally locked Core is paused).
 ## allowance: remaining pause seconds of the field the Core is inside (0 when not in a field).
 ## ff: a Fast-Forward field covers the Core (only applies outside a Stability Field).
 static func volatility_step(v: float, delta: float, ticking: bool, in_field: bool, allowance: float, ff: bool) -> Dictionary:

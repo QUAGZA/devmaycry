@@ -19,6 +19,7 @@ const BTN_SLOT4 := 4096
 ## Two-slot loadout: SLOT1/SLOT2 select the equipped weapons, PREV/NEXT are the mouse wheel (SLOT3/SLOT4 are unused).
 const BTN_PREV := 8192
 const BTN_NEXT := 16384
+const BTN_DROP := 32768           # G: the Core carrier puts the Core down
 
 const WALK_SPEED := 6.0
 const SPRINT_SPEED := 8.6
@@ -539,6 +540,8 @@ func gather_input() -> Array:
 	if _wheel_hold > 0:
 		_wheel_hold -= 1
 		b |= _wheel_bit
+	if Input.is_action_pressed("drop_core"):
+		b |= BTN_DROP
 	return [move, yaw, pitch, b]
 
 
@@ -631,6 +634,8 @@ func server_step(delta: float) -> void:
 	interact_held = (inp_buttons & BTN_INTERACT) != 0
 	if (pressed & BTN_ECHO) != 0 and Game.match_server != null:
 		Game.match_server.request_ability(self)
+	if (pressed & BTN_DROP) != 0 and carrying_core and Game.match_server != null and Game.match_server.rules != null and Game.match_server.rules.has_method("request_drop"):
+		Game.match_server.rules.request_drop(self)
 	recorder.push(_now(), global_position, yaw, pitch)
 	if Game.map_def != null and global_position.y < Game.map_def.kill_y and Game.match_server != null:
 		Game.match_server.on_out_of_bounds(self)
@@ -1043,6 +1048,10 @@ func _process(delta: float) -> void:
 		var local_ads := ads if multiplayer.is_server() else (Input.is_action_pressed("ads") and Game.autopilot == null and not Game.paused_local)
 		_fov_target = float(Weapons.get_data(weapon_id)["ads_fov"]) if local_ads and alive else Settings.fov
 		cam.fov = lerpf(cam.fov, _fov_target, minf(1.0, 12.0 * delta))
+		# camera shake: a small jitter that follows the firing kick, scaled by the CAMERA SHAKE setting
+		var shake_amt := _view_kick * Settings.shake * (0.35 if local_ads else 1.0) if alive else 0.0
+		cam.h_offset = randf_range(-1.0, 1.0) * 0.012 * shake_amt
+		cam.v_offset = randf_range(-1.0, 1.0) * 0.012 * shake_amt
 	_update_life_visuals(delta)
 	_update_footsteps(delta)
 	if viewmodel.visible:
@@ -1099,7 +1108,7 @@ func _animate_viewmodel(delta: float) -> void:
 	var on_ground := is_on_floor() if multiplayer.is_server() else (flags & F_FLOOR) != 0
 	var bob_amt := clampf(hspeed / 8.6, 0.0, 1.0) * (1.0 if on_ground else 0.2) * (0.35 if ads else 1.0)
 	_bob_t += delta * (6.0 + hspeed * 0.9)
-	var bob := Vector3(sin(_bob_t) * 0.012, -absf(cos(_bob_t)) * 0.014, 0.0) * bob_amt * (1.0 if Settings.head_bob else 0.35)
+	var bob := Vector3(sin(_bob_t) * 0.012, -absf(cos(_bob_t)) * 0.014, 0.0) * bob_amt * (1.0 if Settings.head_bob else 0.0)
 	var look := Vector2(yaw, pitch)
 	var dl := look - _sway
 	dl.x = wrapf(dl.x, -PI, PI)
