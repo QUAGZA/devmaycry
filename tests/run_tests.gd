@@ -15,8 +15,25 @@ func _init() -> void:
 		_test_hot_return_rules()
 	if ResourceLoader.exists("res://src/weapons/Weapons.gd"):
 		_test_weapons()
+	if ResourceLoader.exists("res://src/rules/SabotageRules.gd"):
+		_test_sabotage_rules()
 	print("[Tests] passed=%d failed=%d" % [_passes, _fails])
 	quit(1 if _fails > 0 else 0)
+
+
+func _test_sabotage_rules() -> void:
+	print("Sabotage rules")
+	var S = load("res://src/rules/SabotageRules.gd")
+	var HR = load("res://src/rules/HotReturnRules.gd")
+	check(S.next_kind(0) == 1 and S.next_kind(3) == 0, "cycling the sabotage kind wraps around")
+	check(S.name_of(0) == "MIRAGE" and S.name_of(1) == "SEAL" and S.name_of(2) == "JAMMER" and S.name_of(3) == "CUT", "every kind has its display name")
+	check(S.name_of(7) == "CUT", "out-of-range kind indices wrap instead of failing")
+	check(S.TEAM_COOLDOWN > 0.0 and S.TEAM_COOLDOWN < HR.ROUND_TIME, "a team cooldown exists and is shorter than a round")
+	check(S.JAM_CHARGE > 0.0 and S.JAM_CHARGE < S.JAM_DURATION, "the jammer charges for a while before it fires, and lasts longer than the charge")
+	check(S.MIRAGE_REVEAL_RADIUS == 2.6, "the decoy reveal uses the Core pickup radius")
+	check(S.within(Vector3(0, 0, 0), Vector3(2, 0.5, 0), 2.5), "range check accepts a point inside the radius on the same floor")
+	check(not S.within(Vector3(0, 0, 0), Vector3(2, 0, 0), 1.5), "range check rejects a point outside the radius")
+	check(not S.within(Vector3(0, 0, 0), Vector3(0, 5, 0), 10.0), "range check rejects a point on another floor")
 
 
 func check(cond: bool, label: String) -> void:

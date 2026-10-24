@@ -20,6 +20,8 @@ var ff_ring: MeshInstance3D = null
 var core_mat: StandardMaterial3D = null
 var core_shader: ShaderMaterial = null
 var ff_disc: MeshInstance3D = null
+var decoy_node: Node3D = null         # defender MIRAGE: the fake Core signal
+var jam_ring: MeshInstance3D = null   # defender JAMMER: the charging pulse ring
 var ff_life := 0.0
 
 
@@ -330,6 +332,22 @@ func _build_hotreturn() -> void:
 	ff_disc.material_override = ffm
 	ff_disc.visible = false
 	holder.add_child(ff_disc)
+	decoy_node = Node3D.new()
+	decoy_node.name = "CoreSignal"
+	var dsph := MeshInstance3D.new()
+	var dsm := SphereMesh.new()
+	dsm.radius = 0.45
+	dsm.height = 0.9
+	dsph.mesh = dsm
+	dsph.position = Vector3(0, 1.2, 0)
+	dsph.material_override = Features.glow_mat(Palette.BRASS, 2.0)
+	decoy_node.add_child(dsph)
+	decoy_node.add_child(Features.label("CORE SIGNAL / UNVERIFIED", Vector3(0, 2.6, 0), Palette.BRASS, 56))
+	decoy_node.visible = false
+	holder.add_child(decoy_node)
+	jam_ring = _ring_mesh(SabotageRules.JAM_RADIUS, 0.3, Palette.COBALT, 2.5)
+	jam_ring.visible = false
+	holder.add_child(jam_ring)
 
 
 func _update_hotreturn(delta: float) -> void:
@@ -416,6 +434,17 @@ func _update_hotreturn(delta: float) -> void:
 	else:
 		ff_ring.visible = false
 		ff_disc.visible = false
+	var sab: Dictionary = live.get("sabotage", {})
+	var decoy: Dictionary = sab.get("decoy", {})
+	decoy_node.visible = bool(decoy.get("active", false))
+	if decoy_node.visible:
+		decoy_node.global_position = Vector3(decoy.get("pos", Vector3.ZERO))
+		decoy_node.rotate_y(delta * 1.2)
+	var jam: Dictionary = sab.get("jam", {})
+	jam_ring.visible = bool(jam.get("pending", false))
+	if jam_ring.visible:
+		jam_ring.global_position = Vector3(jam.get("pos", Vector3.ZERO)) + Vector3(0, 0.12, 0)
+		jam_ring.scale = Vector3.ONE * (1.0 + 0.04 * sin(_bob * 10.0))
 
 
 func _update_relic(_delta: float) -> void:

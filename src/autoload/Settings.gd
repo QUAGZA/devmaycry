@@ -70,6 +70,8 @@ func _setup_input_map() -> void:
 	_bind_mouse("ads", MOUSE_BUTTON_RIGHT)
 	_bind_key("interact", KEY_E)
 	_bind_key("drop_core", KEY_G)
+	_bind_key("sabotage", KEY_F)
+	_bind_key("sabo_cycle", KEY_V)
 	_bind_key("reload", KEY_R)
 	_bind_key("pause", KEY_ESCAPE)
 	_bind_key("scoreboard", KEY_TAB)

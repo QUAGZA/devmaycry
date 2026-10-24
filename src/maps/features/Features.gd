@@ -104,6 +104,9 @@ class PhaseGate extends Area3D:
 	var lockout: Dictionary = {}
 	var refused: Dictionary = {}       # carriers told the gate will not take the Core (message throttle)
 	var ring: MeshInstance3D
+	var ring_mat: StandardMaterial3D
+	var gate_label: Label3D
+	var sealed_left := 0.0            # defender SEAL: seconds the gate refuses everyone (server)
 
 	func setup(pos: Vector3, yaw_deg: float, exit: Vector3, exit_yaw_deg: float, gname: String) -> void:
 		position = pos
@@ -128,7 +131,8 @@ class PhaseGate extends Area3D:
 		ring.mesh = tm
 		ring.rotation_degrees = Vector3(90, 0, 0)
 		ring.position = Vector3(0, 1.9, 0)
-		ring.material_override = Features.glow_mat(Palette.MINT, 2.5)
+		ring_mat = Features.glow_mat(Palette.MINT, 2.5)
+		ring.material_override = ring_mat
 		add_child(ring)
 		var surface := MeshInstance3D.new()
 		var surf_mesh := PlaneMesh.new()
@@ -164,7 +168,8 @@ class PhaseGate extends Area3D:
 		floor_mark.position = Vector3(0, 0.03, 0)
 		floor_mark.material_override = Features.glow_mat(Palette.MINT, 1.2, 0.35)
 		add_child(floor_mark)
-		add_child(Features.label("PHASE GATE %s" % gname, Vector3(0, 5.0, 0), Palette.MINT, 56))
+		gate_label = Features.label("PHASE GATE %s" % gname, Vector3(0, 5.0, 0), Palette.MINT, 56)
+		add_child(gate_label)
 
 	func validate() -> Dictionary:
 		var fwd := Basis(Vector3.UP, exit_yaw) * Vector3.FORWARD
@@ -174,9 +179,19 @@ class PhaseGate extends Area3D:
 			"ok": bool(spot["ok"]) and not here_blocked, "exit_ok": bool(spot["ok"]), "exit_moved": snappedf(float(spot["moved"]), 0.01), "entry_blocked": here_blocked}
 
 	func _process(_delta: float) -> void:
+		# SEAL is replicated through the live state, so every peer shows the same seal
+		var sealed := float(Game.live.get("sabotage", {}).get("seals", {}).get(gate_name, 0.0)) > 0.0
+		var col: Color = Palette.VERMILION if sealed else Palette.MINT
+		ring_mat.albedo_color = col
+		ring_mat.emission = col
+		var title := ("PHASE GATE %s / SEALED" % gate_name) if sealed else ("PHASE GATE %s" % gate_name)
+		if gate_label.text != title:
+			gate_label.text = title
 		if Features.near_local(global_position, 3.4):
 			var lp = Game.local_player
-			if lp.carrying_core:
+			if sealed:
+				Game.set_prompt("PHASE GATE SEALED BY THE DEFENDERS")
+			elif lp.carrying_core:
 				Game.set_prompt("PHASE GATES REFUSE THE CAUSAL CORE")
 			else:
 				Game.set_prompt("STAND IN THE GATE TO PHASE")
@@ -193,10 +208,19 @@ class PhaseGate extends Area3D:
 			refused[id] -= delta
 			if refused[id] <= 0.0:
 				refused.erase(id)
+		if sealed_left > 0.0:
+			sealed_left = maxf(0.0, sealed_left - delta)
 		var inside := {}
 		for p in Features.players_in(self):
 			inside[p.id] = true
 			if lockout.has(p.id) or p.zip_t > 0.0:
+				continue
+			if sealed_left > 0.0:
+				if not refused.has(p.id):
+					refused[p.id] = 2.5
+					if p.id > 0:
+						Game.rpc_notice.rpc_id(p.id, "PHASE GATE %s IS SEALED" % gate_name, 1.6)
+				progress.erase(p.id)
 				continue
 			if p.carrying_core:
 				# the carry routes (and the 26 s fuse) are tuned around walking: a gate would skip them
@@ -245,6 +269,7 @@ class Zipline extends Node3D:
 	var needs_release: Dictionary = {}   # rider id -> true until the interact key has been let go (HOLD E must not re-attach after the ride)
 	var refused: Dictionary = {}
 	var disabled_reason := ""
+	var cut_left := 0.0               # defender CUT: seconds the cable is offline (server)
 
 	func setup(from: Vector3, to: Vector3, zname: String) -> void:
 		a = from
@@ -337,11 +362,14 @@ class Zipline extends Node3D:
 				push_warning("Zipline %s is obstructed and has been disabled: %s" % [zip_name, str(r)])
 
 	func _process(_delta: float) -> void:
+		var cut_s := float(Game.live.get("sabotage", {}).get("cuts", {}).get("zip:" + zip_name, 0.0))
 		for ar in anchors:
 			if Features.near_local((ar as Area3D).global_position, 2.6):
 				var lp = Game.local_player
 				if disabled_reason != "":
 					Game.set_prompt("ZIPLINE OFFLINE")
+				elif cut_s > 0.0:
+					Game.set_prompt("ZIPLINE CUT BY THE DEFENDERS  /  BACK ONLINE IN %d s" % int(ceil(cut_s)))
 				elif lp.carrying_core:
 					Game.set_prompt("THE CAUSAL CORE CANNOT RIDE A ZIPLINE")
 				else:
@@ -350,6 +378,7 @@ class Zipline extends Node3D:
 	func _physics_process(delta: float) -> void:
 		if not multiplayer.is_server():
 			return
+		cut_left = maxf(0.0, cut_left - delta)
 		for id in lockout.keys():
 			lockout[id] -= delta
 			if lockout[id] <= 0.0:
@@ -368,7 +397,11 @@ class Zipline extends Node3D:
 					continue
 				if riders.has(p.id) or lockout.has(p.id) or not (p.interact_held or p.interact_buffer_t > 0.0) or p.zip_t > 0.0:
 					continue
-				if disabled_reason != "":
+				if disabled_reason != "" or cut_left > 0.0:
+					if cut_left > 0.0 and not refused.has(p.id):
+						refused[p.id] = 2.5
+						if p.id > 0:
+							Game.rpc_notice.rpc_id(p.id, "ZIPLINE CUT  /  BACK ONLINE IN %d s" % int(ceil(cut_left)), 1.6)
 					continue
 				if p.carrying_core:
 					# cables are shortcuts over the carry route: the Core is too volatile to hang from one
@@ -434,6 +467,12 @@ class Zipline extends Node3D:
 				needs_release[id] = true
 				Game.log_ev("Feature", "zip_detach", {"id": id, "zip": zip_name, "moved": snappedf(float(spot2["moved"]), 0.01)})
 
+	## Sabotage: take the cable offline for a few seconds. Anyone riding it is dropped where they stand.
+	func cut(seconds: float) -> void:
+		cut_left = seconds
+		if seconds > 0.0:
+			drop_all()
+
 	func drop_all() -> void:
 		for id in riders.keys():
 			var p = Game.players.get(id)
@@ -453,6 +492,7 @@ class VectorSling extends Area3D:
 	var lockout: Dictionary = {}
 	var refused: Dictionary = {}
 	var arrow: MeshInstance3D
+	var cut_left := 0.0               # defender CUT: seconds the pad is offline (server)
 
 	func setup(pos: Vector3, land: Vector3, flight_time: float, sname: String) -> void:
 		position = pos
@@ -549,6 +589,9 @@ class VectorSling extends Area3D:
 			d.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			add_child(d)
 
+	func cut(seconds: float) -> void:
+		cut_left = seconds
+
 	func _physics_process(delta: float) -> void:
 		arrow.position.y = 0.3 + 0.1 * sin(Time.get_ticks_msec() / 250.0)
 		if not multiplayer.is_server():
@@ -562,6 +605,14 @@ class VectorSling extends Area3D:
 			refused[id] -= delta
 			if refused[id] <= 0.0:
 				refused.erase(id)
+		cut_left = maxf(0.0, cut_left - delta)
+		if cut_left > 0.0:
+			for p in Features.players_in(self):
+				if not refused.has(p.id):
+					refused[p.id] = 2.5
+					if p.id > 0:
+						Game.rpc_notice.rpc_id(p.id, "LAUNCH PAD CUT  /  BACK ONLINE IN %d s" % int(ceil(cut_left)), 1.6)
+			return
 		if cooldown > 0.0:
 			return
 		for p in Features.players_in(self):

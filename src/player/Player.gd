@@ -20,6 +20,8 @@ const BTN_SLOT4 := 4096
 const BTN_PREV := 8192
 const BTN_NEXT := 16384
 const BTN_DROP := 32768           # G: the Core carrier puts the Core down
+const BTN_SABOTAGE := 65536       # F: defenders fire the selected sabotage
+const BTN_SABO_SEL := 786432      # defenders: selected sabotage kind in two bits (18-19), sent every frame
 
 const WALK_SPEED := 6.0
 const SPRINT_SPEED := 8.6
@@ -99,6 +101,9 @@ var rewind_start := 0.0
 var body_yaw := 0.0
 var re_spent := false
 var ff_spent := false
+var sabo_spent := false       # defender sabotage charge, reset every round (server)
+var jam_until := 0.0          # Reverse Entropy is jammed until this match time (server)
+var sabo_sel := 0             # defenders: selected sabotage kind, cycled with V (client), sent with every input
 var ff_until := 0.0
 var last_attacker := 0
 var inp_move := Vector2.ZERO
@@ -542,6 +547,11 @@ func gather_input() -> Array:
 		b |= _wheel_bit
 	if Input.is_action_pressed("drop_core"):
 		b |= BTN_DROP
+	if Input.is_action_just_pressed("sabo_cycle"):
+		sabo_sel = SabotageRules.next_kind(sabo_sel)
+	if Input.is_action_pressed("sabotage"):
+		b |= BTN_SABOTAGE
+	b |= sabo_sel << 18
 	return [move, yaw, pitch, b]
 
 
@@ -636,6 +646,8 @@ func server_step(delta: float) -> void:
 		Game.match_server.request_ability(self)
 	if (pressed & BTN_DROP) != 0 and carrying_core and Game.match_server != null and Game.match_server.rules != null and Game.match_server.rules.has_method("request_drop"):
 		Game.match_server.rules.request_drop(self)
+	if (pressed & BTN_SABOTAGE) != 0 and Game.match_server != null:
+		Game.match_server.request_sabotage(self, (inp_buttons & BTN_SABO_SEL) >> 18)
 	recorder.push(_now(), global_position, yaw, pitch)
 	if Game.map_def != null and global_position.y < Game.map_def.kill_y and Game.match_server != null:
 		Game.match_server.on_out_of_bounds(self)

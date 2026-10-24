@@ -25,6 +25,10 @@ var _was_in_field := false
 const DROP_REGRAB_LOCK := 1.5
 var _drop_lock_id := 0
 var _drop_lock_until := 0.0
+## Defender sabotage kit (see SabotageRules). One charge per defender per round, one team cooldown.
+var sabo_team_cd := {1: 0.0, 2: 0.0}
+var sabo_decoy := {"active": false, "pos": Vector3.ZERO, "left": 0.0}
+var sabo_jam := {"pending": false, "pos": Vector3.ZERO, "fire_at": 0.0, "team": 0}
 
 
 func _init(server: MatchServer) -> void:
@@ -72,6 +76,14 @@ func _start_round() -> void:
 		field_allowance.append(HotReturnRules.FIELD_ALLOWANCE)
 	ff_field = {"active": false, "pos": Vector3.ZERO, "until": 0.0, "owner": 0}
 	charges.clear()
+	sabo_team_cd = {1: 0.0, 2: 0.0}
+	sabo_decoy = {"active": false, "pos": Vector3.ZERO, "left": 0.0}
+	sabo_jam = {"pending": false, "pos": Vector3.ZERO, "fire_at": 0.0, "team": 0}
+	for n in ms.def.features.get_children():
+		if n is Features.PhaseGate:
+			n.sealed_left = 0.0
+		elif n is Features.Zipline or n is Features.VectorSling:
+			n.cut(0.0)
 	ms.cancel_respawns()
 	ms.clear_echoes("round_reset")
 	ms.def.reset_features()
@@ -87,6 +99,8 @@ func _start_round() -> void:
 		p.ff_spent = false
 		p.rewind_t = 0.0
 		p.ff_until = 0.0
+		p.sabo_spent = false
+		p.jam_until = 0.0
 		charges[p.id] = {"re": false, "ff": false}
 	ms.push_state()
 	var atk := attacking_team()
@@ -116,6 +130,7 @@ func step(delta: float) -> void:
 		"live":
 			time_left = maxf(0.0, time_left - delta)
 			_step_ff(delta)
+			_step_sabotage(delta)
 			_step_core(delta)
 			_check_result()
 		"round_end":
@@ -290,6 +305,9 @@ func request_ability(p: Player) -> void:
 
 
 func _reverse_entropy(p: Player) -> void:
+	if p.jam_until > ms.match_time:
+		_deny(p, "ENTROPY JAMMED  /  %d s" % int(ceil(p.jam_until - ms.match_time)))
+		return
 	if bool(charges[p.id]["re"]) or p.re_spent:
 		_deny(p, "REVERSE ENTROPY / SPENT THIS ROUND")
 		return
@@ -337,6 +355,186 @@ func _deny(p: Player, text: String) -> void:
 	if p.id > 0:
 		Game.rpc_notice.rpc_id(p.id, text, 1.5)
 	Game.log_ev("Ability", "denied", {"id": p.id, "why": text})
+
+
+# ---------------------------------------------------------------- defender sabotage
+## F: the selected sabotage. Denied with a reason (no charge spent) when it cannot land where the defender stands.
+func request_sabotage(p: Player, kind: int) -> void:
+	if phase != "live" or not p.alive or p.frozen or p.rewind_t > 0.0:
+		return
+	if role_of(p.team) != "defend":
+		return   # the kit belongs to the defenders; attackers have Reverse Entropy
+	if p.sabo_spent:
+		_deny(p, "SABOTAGE  /  SPENT THIS ROUND")
+		return
+	if float(sabo_team_cd[p.team]) > 0.0:
+		_deny(p, "SABOTAGE  /  TEAM COOLDOWN %d s" % int(ceil(float(sabo_team_cd[p.team]))))
+		return
+	var err := ""
+	match SabotageRules.KINDS[kind]:
+		"mirage":
+			err = _sabo_mirage(p)
+		"seal":
+			err = _sabo_seal(p)
+		"jam":
+			err = _sabo_jam(p)
+		_:
+			err = _sabo_cut(p)
+	if err != "":
+		_deny(p, err)
+		return
+	p.sabo_spent = true
+	sabo_team_cd[p.team] = SabotageRules.TEAM_COOLDOWN
+	Game.log_ev("Sabotage", SabotageRules.KINDS[kind], {"id": p.id, "team": p.team, "round": int(m["round"])})
+	ms.push_state()
+
+
+func _sabo_mirage(p: Player) -> String:
+	if bool(sabo_decoy["active"]):
+		return "MIRAGE  /  A SIGNAL IS ALREADY BROADCASTING"
+	if not p.is_on_floor():
+		return "MIRAGE  /  DEPLOY FROM THE GROUND"
+	sabo_decoy = {"active": true, "pos": p.global_position, "left": SabotageRules.MIRAGE_LIFE}
+	_team_notice(attacking_team(), "UNVERIFIED CORE SIGNAL DETECTED  /  HOLD E NEXT TO IT TO CHECK", 3.0)
+	_team_notice(p.team, "MIRAGE DEPLOYED  /  %d s" % int(SabotageRules.MIRAGE_LIFE), 2.0)
+	Game.rpc_fx.rpc("mirage", p.id, p.global_position)
+	return ""
+
+
+func _sabo_seal(p: Player) -> String:
+	var best = null
+	var best_d := SabotageRules.SEAL_REACH
+	for n in ms.def.features.get_children():
+		if not (n is Features.PhaseGate):
+			continue
+		var d := SabotageRules.flat_distance(p.global_position, n.global_position)
+		if d <= best_d:
+			best_d = d
+			best = n
+	if best == null:
+		return "SEAL  /  NO PHASE GATE IN REACH"
+	if float(best.sealed_left) > 0.0:
+		return "SEAL  /  PHASE GATE %s IS ALREADY SEALED" % str(best.gate_name)
+	best.sealed_left = SabotageRules.SEAL_TIME
+	_team_notice(attacking_team(), "PHASE GATE %s SEALED  /  %d s" % [str(best.gate_name), int(SabotageRules.SEAL_TIME)], 2.5)
+	_team_notice(p.team, "PHASE GATE %s SEALED" % str(best.gate_name), 2.0)
+	return ""
+
+
+func _sabo_jam(p: Player) -> String:
+	if bool(sabo_jam["pending"]):
+		return "JAMMER  /  ALREADY CHARGING"
+	sabo_jam = {"pending": true, "pos": p.global_position, "fire_at": ms.match_time + SabotageRules.JAM_CHARGE, "team": p.team}
+	_team_notice(attacking_team(), "ENTROPY JAMMER CHARGING  /  LEAVE THE RING", SabotageRules.JAM_CHARGE)
+	_team_notice(p.team, "JAMMER CHARGING", SabotageRules.JAM_CHARGE)
+	return ""
+
+
+func _sabo_cut(p: Player) -> String:
+	var best = null
+	var best_d := SabotageRules.CUT_REACH
+	for n in ms.def.features.get_children():
+		if not (n is Features.Zipline or n is Features.VectorSling):
+			continue
+		if float(n.cut_left) > 0.0:
+			continue
+		var d := _cut_distance(p.global_position, n)
+		if d <= best_d:
+			best_d = d
+			best = n
+	if best == null:
+		return "CUT  /  NO ZIPLINE OR LAUNCH PAD IN REACH"
+	best.cut(SabotageRules.CUT_TIME)
+	var label: String = ("ZIPLINE " + str(best.zip_name)) if best is Features.Zipline else ("LAUNCH PAD " + str(best.sling_name))
+	_team_notice(attacking_team(), "%s CUT  /  OFFLINE FOR %d s" % [label, int(SabotageRules.CUT_TIME)], 2.5)
+	_team_notice(p.team, "CUT: %s" % label, 2.0)
+	return ""
+
+
+func _cut_distance(at: Vector3, n) -> float:
+	if n is Features.Zipline:
+		return minf(SabotageRules.flat_distance(at, n.to_global(n.a)), SabotageRules.flat_distance(at, n.to_global(n.b)))
+	return SabotageRules.flat_distance(at, n.global_position)
+
+
+func _step_sabotage(delta: float) -> void:
+	for t in [1, 2]:
+		sabo_team_cd[t] = maxf(0.0, float(sabo_team_cd[t]) - delta)
+	if bool(sabo_decoy["active"]):
+		sabo_decoy["left"] = float(sabo_decoy["left"]) - delta
+		if float(sabo_decoy["left"]) <= 0.0:
+			sabo_decoy["active"] = false
+			_team_notice(attacking_team(), "CORE SIGNAL FADED", 2.0)
+		else:
+			_check_decoy_reveal()
+	if bool(sabo_jam["pending"]) and ms.match_time >= float(sabo_jam["fire_at"]):
+		_fire_jam()
+
+
+## An attacker holding E next to the decoy finds out it is not the Core. The decoy is removed; nothing else changes.
+func _check_decoy_reveal() -> void:
+	var at: Vector3 = sabo_decoy["pos"]
+	for p: Player in Game.players.values():
+		if not is_instance_valid(p) or not p.alive or not p.interact_held or p.carrying_core or role_of(p.team) != "attack":
+			continue
+		if not SabotageRules.within(p.global_position, at, SabotageRules.MIRAGE_REVEAL_RADIUS):
+			continue
+		sabo_decoy["active"] = false
+		Game.log_ev("Sabotage", "mirage_revealed", {"id": p.id})
+		if p.id > 0:
+			Game.rpc_notice.rpc_id(p.id, "DECOY  /  THAT WAS NOT THE CORE", 2.5)
+		_team_notice(defending_team(), "THEY FOUND THE DECOY", 2.0)
+		Game.rpc_fx.rpc("warn", p.id, at)
+		return
+
+
+func _fire_jam() -> void:
+	var at: Vector3 = sabo_jam["pos"]
+	var hit := 0
+	for p: Player in Game.players.values():
+		if not is_instance_valid(p) or not p.alive or role_of(p.team) != "attack":
+			continue
+		if not SabotageRules.within(p.global_position, at, SabotageRules.JAM_RADIUS):
+			continue
+		p.jam_until = ms.match_time + SabotageRules.JAM_DURATION
+		hit += 1
+		if p.id > 0:
+			Game.rpc_notice.rpc_id(p.id, "ENTROPY JAMMED  /  REVERSE ENTROPY OFFLINE %d s" % int(SabotageRules.JAM_DURATION), 2.5)
+	var jam_team := int(sabo_jam["team"])
+	sabo_jam["pending"] = false
+	Game.rpc_fx.rpc("jam", 0, at)
+	_team_notice(jam_team, "JAMMER FIRED  /  %d ATTACKER(S) JAMMED" % hit, 2.0)
+	Game.log_ev("Sabotage", "jam_fired", {"hit": hit})
+
+
+func _team_notice(team: int, text: String, seconds: float) -> void:
+	for p: Player in Game.players.values():
+		if is_instance_valid(p) and p.team == team and p.id > 0:
+			Game.rpc_notice.rpc_id(p.id, text, seconds)
+
+
+func _sabotage_live() -> Dictionary:
+	var seals := {}
+	var cuts := {}
+	for n in ms.def.features.get_children():
+		if n is Features.PhaseGate and float(n.sealed_left) > 0.0:
+			seals[str(n.gate_name)] = float(n.sealed_left)
+		elif n is Features.Zipline and float(n.cut_left) > 0.0:
+			cuts["zip:" + str(n.zip_name)] = float(n.cut_left)
+		elif n is Features.VectorSling and float(n.cut_left) > 0.0:
+			cuts["sling:" + str(n.sling_name)] = float(n.cut_left)
+	var spent := {}
+	for p: Player in Game.players.values():
+		if is_instance_valid(p) and p.sabo_spent:
+			spent[p.id] = true
+	return {
+		"decoy": {"active": bool(sabo_decoy["active"]), "pos": sabo_decoy["pos"], "left": float(sabo_decoy["left"])},
+		"jam": {"pending": bool(sabo_jam["pending"]), "pos": sabo_jam["pos"], "left": maxf(0.0, float(sabo_jam["fire_at"]) - ms.match_time), "radius": SabotageRules.JAM_RADIUS},
+		"seals": seals,
+		"cuts": cuts,
+		"spent": spent,
+		"team_cd": {1: float(sabo_team_cd[1]), 2: float(sabo_team_cd[2])},
+	}
 
 
 # ---------------------------------------------------------------- result
@@ -474,4 +672,5 @@ func live_dict() -> Dictionary:
 		"vault": ms.def.vaults.get(defending_team(), Vector3.ZERO),
 		"stabilizer": ms.def.stabilizers.get(attacking_team(), Vector3.ZERO),
 		"match_time": ms.match_time,
+		"sabotage": _sabotage_live(),
 	}

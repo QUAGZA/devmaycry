@@ -19,6 +19,7 @@ var armory: Armory
 var _last_weapon := ""
 var dash_card: Dictionary
 var echo_card: Dictionary
+var sabo_card: Dictionary     # defenders only (Hot Return): the selected sabotage and its state
 var feed_box: VBoxContainer
 var notice_lbl: Label
 var sub_notice_lbl: Label
@@ -219,6 +220,9 @@ func _build() -> void:
 	br.add_child(dash_card["root"])
 	echo_card = _ability_card("Q", "ECHO")
 	br.add_child(echo_card["root"])
+	sabo_card = _ability_card("F", "SABOTAGE")
+	sabo_card["root"].visible = false
+	br.add_child(sabo_card["root"])
 	var ammo_card := PanelContainer.new()
 	ammo_card.add_theme_stylebox_override("panel", UiTheme.card(Color(Palette.INK, 0.72), Color(Palette.STONE, 0.6), 1, 2, 12))
 	ammo_card.custom_minimum_size = Vector2(250, 110)
@@ -514,7 +518,7 @@ func _refresh_state() -> void:
 			objective_lbl.text = "ATTACK: steal the Causal Core from the enemy vault and reach your Stabilizer before it detonates"
 			echo_card["name"].text = "REVERSE"
 		elif role == "DEFEND":
-			objective_lbl.text = "DEFEND: hold the vault, pressure the carrier, let the Core reach 100%"
+			objective_lbl.text = "DEFEND: hold the vault, pressure the carrier, let the Core reach 100%   /   F SABOTAGE  (V CYCLES THE KIND)"
 			echo_card["name"].text = "FAST-FWD"
 		else:
 			objective_lbl.text = str(s.get("objective", ""))
@@ -626,6 +630,10 @@ func _process(delta: float) -> void:
 			var roles: Dictionary = Game.state.get("roles", {})
 			var spent := p.ff_spent if str(roles.get(p.team, "")) == "DEFEND" else p.re_spent
 			_update_charge(echo_card, not spent)
+			var is_def := str(roles.get(p.team, "")) == "DEFEND"
+			sabo_card["root"].visible = is_def
+			if is_def:
+				_update_sabotage_card(p)
 			_update_hotreturn_live(p)
 		elif Game.mode_id == "relic_rush":
 			echo_card["name"].text = "REVERSE"
@@ -754,6 +762,29 @@ func _update_hotreturn_live(p: Player) -> void:
 		hint_lbl.text = "FAST-FORWARD ACTIVE / %0.1f s" % float(ff.get("left", 0.0))
 	if p.rewind_t > 0.0:
 		hint_lbl.text = "REVERSE ENTROPY / RE-TRAVERSING YOUR ROUTE  ·  AIM AND FIRE FREELY"
+
+
+## Defender sabotage card: the selected kind (V cycles it), then SPENT, TEAM cooldown or READY (F fires it).
+func _update_sabotage_card(p: Player) -> void:
+	var sab: Dictionary = Game.live.get("sabotage", {})
+	var spent: bool = (sab.get("spent", {}) as Dictionary).has(p.id)
+	var cd := float((sab.get("team_cd", {}) as Dictionary).get(p.team, 0.0))
+	var ready := not spent and cd <= 0.0
+	sabo_card["name"].text = SabotageRules.name_of(p.sabo_sel)
+	var fill: ColorRect = sabo_card["fill"]
+	var panel: PanelContainer = sabo_card["root"]
+	fill.size = Vector2(panel.size.x, panel.size.y if ready else 0.0)
+	fill.position = Vector2(0, panel.size.y - fill.size.y)
+	var cdl: Label = sabo_card["cd"]
+	if spent:
+		cdl.text = "SPENT"
+		cdl.add_theme_color_override("font_color", Palette.VERMILION)
+	elif cd > 0.0:
+		cdl.text = "TEAM %0.1f" % cd
+		cdl.add_theme_color_override("font_color", Palette.STONE)
+	else:
+		cdl.text = "READY"
+		cdl.add_theme_color_override("font_color", Palette.MINT)
 
 
 func _update_card(card: Dictionary, cd: float, total: float) -> void:

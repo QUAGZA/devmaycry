@@ -411,6 +411,11 @@ func _physics_process(delta: float) -> void:
 	if args.has("respawn-selftest") and not _probed and match_server != null and match_server.phase == "live" and map_def != null:
 		_probed = true
 		_respawn_selftest()
+	if args.has("sabotage-selftest") and not _probed and match_server != null and match_server.rules != null and match_server.rules.phase == "live" and map_def != null:
+		_probed = true
+		var sab_st := SabotageSelfTest.new()
+		add_child(sab_st)
+		sab_st.run()
 	if args.has("armory-selftest") and not _probed and armory != null and armory.active and map_def != null:
 		_probed = true
 		var st := ArmorySelfTest.new()

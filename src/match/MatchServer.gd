@@ -199,6 +199,16 @@ func on_rewind_pass(p: Player, historical_t: float) -> void:
 			p.get_meta("restored_ids").append(tp.prop_id)
 
 
+## Defender sabotage (F). Only Hot Return has a kit; other modes ignore it.
+func request_sabotage(p: Player, kind: int) -> void:
+	if p.is_protected():
+		if p.id > 0:
+			Game.rpc_notice.rpc_id(p.id, "PROTECTED  /  SABOTAGE UNLOCKS WHEN THE SHIELD ENDS", 1.2)
+		return
+	if rules != null and rules.has_method("request_sabotage"):
+		rules.request_sabotage(p, kind)
+
+
 func request_ability(p: Player) -> void:
 	if p.is_protected():
 		if p.id > 0:
