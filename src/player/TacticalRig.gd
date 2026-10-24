@@ -268,6 +268,7 @@ func set_weapon(id: String) -> void:
 		return
 	weapon_id = id
 	for c in weapon_holder.get_children():
+		weapon_holder.remove_child(c)   # detach now so a switch never shows two models in one frame
 		c.queue_free()
 	var w := WeaponModels.build(id)
 	if w == null:

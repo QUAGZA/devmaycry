@@ -14,6 +14,9 @@ var hp_bar_bg: Control
 var ammo_lbl: Label
 var reserve_lbl: Label
 var ammo_state_lbl: Label
+var other_lbl: Label
+var armory: Armory
+var _last_weapon := ""
 var dash_card: Dictionary
 var echo_card: Dictionary
 var feed_box: VBoxContainer
@@ -22,6 +25,7 @@ var sub_notice_lbl: Label
 var crosshair: Control
 var flash: ColorRect
 var protect_lbl: Label
+var _dead_since := -1.0
 var site_lbl: Label
 var progress_box: Control
 var progress_lbl: Label
@@ -59,6 +63,9 @@ func _ready() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
 	_build()
+	armory = Armory.new()
+	armory.name = "Armory"
+	add_child(armory)
 	Game.notice.connect(_on_notice)
 	Game.kill_feed.connect(_on_kill)
 	Game.damage_fx.connect(_on_damage)
@@ -198,7 +205,7 @@ func _build() -> void:
 	hp_bar.color = Palette.MINT
 	hp_bar.size = Vector2(260, 8)
 	hp_bar_bg.add_child(hp_bar)
-	protect_lbl = UiTheme.stamp("SPAWN SHIELD", Palette.BRASS, 13)
+	protect_lbl = UiTheme.stamp("INVULNERABLE", UiTheme.TEAL, 18)
 	protect_lbl.visible = false
 	bl.add_child(protect_lbl)
 
@@ -214,7 +221,7 @@ func _build() -> void:
 	br.add_child(echo_card["root"])
 	var ammo_card := PanelContainer.new()
 	ammo_card.add_theme_stylebox_override("panel", UiTheme.card(Color(Palette.INK, 0.72), Color(Palette.STONE, 0.6), 1, 2, 12))
-	ammo_card.custom_minimum_size = Vector2(210, 84)
+	ammo_card.custom_minimum_size = Vector2(250, 110)
 	br.add_child(ammo_card)
 	var ammo_box := VBoxContainer.new()
 	ammo_box.alignment = BoxContainer.ALIGNMENT_END
@@ -232,6 +239,9 @@ func _build() -> void:
 	reserve_lbl = UiTheme.label("/ 090", 20, Color(Palette.PORCELAIN, 0.6), mono)
 	reserve_lbl.size_flags_vertical = Control.SIZE_SHRINK_END
 	ammo_row.add_child(reserve_lbl)
+	other_lbl = UiTheme.stamp("[2]  DESERT EAGLE   07 / 028", UiTheme.AMBER, 13)
+	other_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	ammo_box.add_child(other_lbl)
 
 	# Centre: crosshair, notices, interaction progress
 	crosshair = Control.new()
@@ -337,20 +347,22 @@ func _build_pause() -> void:
 	pause_panel.set_anchors_preset(Control.PRESET_CENTER)
 	pause_panel.position = Vector2(-220, -170)
 	pause_panel.size = Vector2(440, 340)
-	pause_panel.add_theme_stylebox_override("panel", UiTheme.card(Color(Palette.INK, 0.94), Palette.PORCELAIN, 1, 2, 24))
+	pause_panel.theme = UiTheme.menu_theme()
+	pause_panel.add_theme_stylebox_override("panel", UiTheme.card_menu(0.97))
 	pause_panel.visible = false
 	root.add_child(pause_panel)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
 	pause_panel.add_child(v)
-	v.add_child(UiTheme.stamp("MATCH PAUSED (LOCAL)", Palette.VERMILION, 14))
-	v.add_child(UiTheme.label("ECHO CLASH", 36, Palette.PORCELAIN, UiTheme.display_font()))
+	v.add_child(UiTheme.stamp("MATCH PAUSED (LOCAL)", UiTheme.AMBER, 14))
+	v.add_child(UiTheme.label("ECHO CLASH", 36, UiTheme.TEXT, UiTheme.title_font(4)))
 	v.add_child(UiTheme.rule())
 	var resume := Button.new()
 	resume.text = "RESUME"
+	UiTheme.style_primary(resume)
 	resume.pressed.connect(func() -> void: Game.set_paused(false))
 	v.add_child(resume)
-	v.add_child(UiTheme.stamp("MOUSE SENSITIVITY", Palette.MINT, 13))
+	v.add_child(UiTheme.stamp("MOUSE SENSITIVITY", UiTheme.TEAL, 13))
 	var sens := HSlider.new()
 	sens.min_value = 0.0005
 	sens.max_value = 0.006
@@ -360,7 +372,7 @@ func _build_pause() -> void:
 		Settings.mouse_sensitivity = val
 		Settings.save_prefs())
 	v.add_child(sens)
-	v.add_child(UiTheme.stamp("MASTER VOLUME", Palette.MINT, 13))
+	v.add_child(UiTheme.stamp("MASTER VOLUME", UiTheme.TEAL, 13))
 	var vol := HSlider.new()
 	vol.min_value = 0.0
 	vol.max_value = 1.0
@@ -370,7 +382,7 @@ func _build_pause() -> void:
 		Settings.master_volume = val
 		Settings.save_prefs())
 	v.add_child(vol)
-	var controls := UiTheme.label("WASD move  ·  SHIFT sprint  ·  SPACE jump  ·  C crouch  ·  CTRL dash\nLMB fire  ·  R reload  ·  Q echo  ·  E interact  ·  TAB scoreboard", 13, Palette.STONE, UiTheme.mono_font())
+	var controls := UiTheme.label("WASD move  ·  SHIFT sprint  ·  SPACE jump  ·  C crouch  ·  CTRL dash\nLMB fire  ·  R reload  ·  Q echo  ·  E interact  ·  TAB scoreboard", 13, UiTheme.MUTED, UiTheme.mono_font())
 	v.add_child(controls)
 	var leave := Button.new()
 	leave.text = "LEAVE MATCH"
@@ -414,7 +426,7 @@ func _on_notice(text: String, seconds: float) -> void:
 func _on_kill(killer_name: String, victim_name: String, cause: String, killer_id: int, victim_id: int) -> void:
 	var l := UiTheme.label("", 15, Palette.PORCELAIN, UiTheme.mono_font())
 	var verb := "LOST"
-	if cause in ["pulse", "rifle", "shotgun", "sniper", "mg"]:
+	if cause in ["pulse", "rifle", "shotgun", "sniper", "mg", "deagle"]:
 		verb = "ERASED"
 	elif cause == "echo":
 		verb = "ECHOED"
@@ -586,8 +598,9 @@ func _process(delta: float) -> void:
 	timer_lbl.text = "%02d:%02d" % [int(tl) / 60, int(tl) % 60]
 	var warn := tl <= 10.0 and tl > 0.0
 	timer_lbl.add_theme_color_override("font_color", Palette.VERMILION if warn else Palette.INK)
-	if p != null and is_instance_valid(p) and p.ads != _last_ads:
+	if p != null and is_instance_valid(p) and (p.ads != _last_ads or p.weapon_id != _last_weapon):
 		_last_ads = p.ads
+		_last_weapon = p.weapon_id
 		crosshair.queue_redraw()
 	if p != null and is_instance_valid(p):
 		hp_lbl.text = "%03d" % int(ceil(p.hp))
@@ -595,7 +608,10 @@ func _process(delta: float) -> void:
 		hp_bar.color = Palette.MINT if p.hp > 50 else (Palette.BRASS if p.hp > 25 else Palette.VERMILION)
 		ammo_lbl.text = "%02d" % p.ammo
 		reserve_lbl.text = "/ %03d" % p.reserve
-		var wname := str(Weapons.get_data(p.weapon_id)["name"])
+		var wname := "[%d]  %s" % [p.slot + 1, str(Weapons.get_data(p.weapon_id)["name"])]
+		var oid := str(p.loadout[1 - p.slot])
+		var oam := p.ammo_of(oid)
+		other_lbl.text = "[%d]  %s   %02d / %03d" % [2 - p.slot, str(Weapons.get_data(oid)["name"]), int(oam["mag"]), int(oam["reserve"])]
 		if p.reload_t > 0.0:
 			ammo_state_lbl.text = "%s / RELOADING %0.1f" % [wname, p.reload_t]
 			ammo_state_lbl.add_theme_color_override("font_color", Palette.BRASS)
@@ -603,7 +619,7 @@ func _process(delta: float) -> void:
 			ammo_state_lbl.text = "%s / EMPTY / PRESS R" % wname if p.reserve > 0 else "%s / NO AMMO" % wname
 			ammo_state_lbl.add_theme_color_override("font_color", Palette.VERMILION)
 		else:
-			ammo_state_lbl.text = "%s / %d" % [wname, int(Weapons.get_data(p.weapon_id)["slot"])]
+			ammo_state_lbl.text = wname
 			ammo_state_lbl.add_theme_color_override("font_color", Palette.MINT)
 		_update_card(dash_card, p.dash_cd, Player.DASH_COOLDOWN)
 		if Game.mode_id == "hot_return":
@@ -618,12 +634,26 @@ func _process(delta: float) -> void:
 				hint_lbl.text = "REVERSE ENTROPY / RE-TRAVERSING YOUR ROUTE"
 		else:
 			_update_card(echo_card, p.echo_cd, 18.0)
-		protect_lbl.visible = p.spawn_protect_t > 0.0
+		protect_lbl.visible = p.is_protected()
+		if protect_lbl.visible:
+			protect_lbl.text = "INVULNERABLE — %ds   (WEAPONS AND OBJECTIVES LOCKED)" % int(ceil(p.spawn_protect_t))
 		dead_lbl.visible = not p.alive
 		if p.alive:
 			dead_lbl.text = ""
-		elif Game.spectating != "":
-			dead_lbl.text = "ELIMINATED / SPECTATING %s" % Game.spectating
+			_dead_since = -1.0
+		else:
+			if _dead_since < 0.0:
+				_dead_since = Time.get_ticks_msec() / 1000.0
+			var head := dead_lbl.text.get_slice("
+", 0)
+			if not head.begins_with("ELIMINATED BY"):
+				head = "ELIMINATED / SPECTATING %s" % Game.spectating if Game.spectating != "" else "ELIMINATED"
+			if str(Game.state.get("phase", "live")) in ["live", "planted", "sudden_death"]:
+				var left := maxf(0.0, MatchServer.RESPAWN_DELAY - (Time.get_ticks_msec() / 1000.0 - _dead_since))
+				dead_lbl.text = "%s
+RESPAWNING IN %d" % [head, int(ceil(left))]
+			else:
+				dead_lbl.text = head
 		var hint := ""
 		var core_live: Dictionary = Game.live.get("core", {})
 		if str(core_live.get("mode", "")) == "planted":
@@ -635,6 +665,8 @@ func _process(delta: float) -> void:
 				hint = "CARRYING THE CAUSAL CORE / reach your home Stabilizer before it detonates"
 			else:
 				hint = "CARRYING THE RESONANCE CORE / hold E inside a site to plant"
+		if hint == "":
+			hint = Game.current_prompt()
 		hint_lbl.text = hint
 		if minimap.view_radius != 42.0:
 			pass
@@ -702,7 +734,7 @@ func _update_hotreturn_live(p: Player) -> void:
 		"carried":
 			txt = "CORE / %s CARRYING / %d%%" % [str(core.get("carrier_name", "")), int(v)]
 		"dropped":
-			txt = "CORE / DROPPED / %d%% TICKING" % int(v)
+			txt = "CORE / DROPPED / %d%% PAUSED" % int(v)
 		"locked":
 			var ll := float(core.get("lock_left", 0.0))
 			txt = "CORE / TEMPORAL LOCK / %d%% FROZEN%s" % [int(v), (" / %0.1f s" % ll) if ll > 0.0 else " / PICK UP"]

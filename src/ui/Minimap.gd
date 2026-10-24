@@ -81,9 +81,19 @@ func _draw() -> void:
 	while gz <= ext2.y:
 		draw_line(xf * (Vector2(-ext2.x, gz) - origin), xf * (Vector2(ext2.x, gz) - origin), grid_col, 1.0)
 		gz += step
-	# arena boundary
+	# arena boundary: authored floor polygons (real topology) or the legacy rectangle
 	draw_set_transform_matrix(xf)
-	draw_rect(Rect2(-ext2 - origin, ext2 * 2.0), Color(Palette.STONE, 0.5), false, 2.0 / scale)
+	if not def.floor_polys.is_empty():
+		for fp in def.floor_polys:
+			var pts: PackedVector2Array = fp["pts"]
+			var shifted := PackedVector2Array()
+			for q in pts:
+				shifted.append(q - origin)
+			var fy: float = fp["y"]
+			var shade := Color(Palette.PORCELAIN, 0.10) if absf(fy) < 0.3 else (Color(Palette.MINT, 0.16) if fy > 0.0 else Color(Palette.COBALT, 0.22))
+			draw_colored_polygon(shifted, shade)
+	else:
+		draw_rect(Rect2(-ext2 - origin, ext2 * 2.0), Color(Palette.STONE, 0.5), false, 2.0 / scale)
 	draw_set_transform_matrix(Transform2D())
 	# geometry footprints
 	for f in def.footprints:
@@ -149,6 +159,11 @@ func _draw() -> void:
 			draw_line(sp, tp, Color(Palette.VERMILION, 0.6), 1.5)
 			draw_circle(sp, 4.0, Palette.VERMILION)
 			draw_arc(tp, 4.0, 0.0, TAU, 12, Palette.VERMILION, 1.5)
+		elif fe is Features.Ladder:
+			var lp2 := xf * fp
+			draw_rect(Rect2(lp2 - Vector2(3, 5), Vector2(6, 10)), Palette.BRASS, false, 1.5)
+			draw_line(lp2 + Vector2(-3, -1.5), lp2 + Vector2(3, -1.5), Palette.BRASS, 1.0)
+			draw_line(lp2 + Vector2(-3, 1.5), lp2 + Vector2(3, 1.5), Palette.BRASS, 1.0)
 	for tp in def.temporal_props:
 		if is_instance_valid(tp):
 			var sp := xf * (Vector2(tp.global_position.x, tp.global_position.z) - origin)

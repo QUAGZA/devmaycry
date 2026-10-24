@@ -6,7 +6,7 @@ extends MapDef
 
 func _init() -> void:
 	family = "foundry"
-	id = "vector_foundry"
+	id = "legacy_foundry"
 	display_name = "VECTOR FOUNDRY"
 	mechanic = "VECTOR SLINGS"
 	blurb = "Kinetic sculpture hall. Launch pads throw you along fixed arcs to offset platforms."

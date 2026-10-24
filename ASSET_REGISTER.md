@@ -22,6 +22,12 @@ All licences were read on the source page and in the files shipped with each pac
 | Quaternius Toon Shooter Game Kit, Sci-Fi Modular Guns, Ultimate Modular Ruins (CC0) | Hosted on Google Drive; every file request returned "Google Drive – Quota exceeded". The quota was not bypassed. |
 | Quaternius Sci-Fi Essentials Kit (CC0, itch.io, 159 MB) | Download stalled twice on this connection; dropped in favour of the Kenney kits. |
 
+## Supplied by the project owner
+
+| Asset | Use |
+|---|---|
+| `assets/sfx/bg_soundtrack/theplan.wav` (PCM WAV, 186 s, 71 MB) | Main-menu / startup soundtrack, used unmodified; looped at the last audible sample by its `.import` settings and played through the `Music` autoload. |
+
 ## Original (made for this project)
 
 Shaders `palimpsest_toon`, `ink_outline`, `sea`, `core`, `rewind`, `fastforward_ring`, `stability_field`, `portal_ring`,

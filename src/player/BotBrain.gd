@@ -34,11 +34,19 @@ var err_pitch := 0.0
 var err_t := 0.0
 var stuck_t := 0.0
 var stuck_pos := Vector3.ZERO
+var stuck_count := 0          # consecutive stuck episodes on the current goal
+var jumped_this_goal := false # at most one recovery jump per goal (no jump spam)
+var sidestep_t := 0.0
+var sidestep_dir := 1.0
+var blocked_goals: Array = [] # [{pos, until}] goals abandoned as unreachable, avoided for a while
+var raw_goal := Vector3.ZERO
+var trace_t := 0.0
 var site_pref := ""
 var last_hp := 100.0
 var hurt_t := 0.0
 var rng := RandomNumberGenerator.new()
 var want_ability := false
+var weapon_swap_t := 0.0
 
 
 func _init(player: Player, diff: String) -> void:
@@ -48,6 +56,31 @@ func _init(player: Player, diff: String) -> void:
 	rng.randomize()
 	aim_yaw = p.yaw
 	stuck_pos = p.global_position
+
+
+## Slot (0/1) whose weapon suits the range: expected damage per second at this distance, with a bonus for
+## the weapon in hand (no flip-flopping), a long-range bonus for scoped weapons, and no empty weapons.
+func _best_slot(dist: float) -> int:
+	var best := p.slot
+	var best_score := -1e9
+	for i in p.loadout.size():
+		var wid := str(p.loadout[i])
+		var d := Weapons.get_data(wid)
+		var am := p.ammo_of(wid)
+		if int(am["mag"]) + int(am["reserve"]) <= 0:
+			continue
+		var acc := clampf(1.25 - dist / 24.0, 0.05, 1.0) if int(d["pellets"]) > 1 else 1.0
+		var score := Weapons.damage_at(wid, dist) * float(d["pellets"]) * acc / maxf(float(d["rof"]), float(prof["fire_gap"]))
+		if wid == "sniper":
+			score *= 2.4 if dist > 50.0 else (0.35 if dist < 22.0 else 1.0)
+		if int(am["mag"]) <= 0:
+			score *= 0.3
+		if i == p.slot:
+			score *= 1.25
+		if score > best_score:
+			best_score = score
+			best = i
+	return best
 
 
 func think(delta: float) -> void:
@@ -90,8 +123,16 @@ func think(delta: float) -> void:
 		aim_yaw = lerp_angle(aim_yaw, want_yaw, minf(1.0, delta * 9.0))
 		aim_pitch = lerpf(aim_pitch, want_pitch, minf(1.0, delta * 9.0))
 		fire_t -= delta
+		weapon_swap_t -= delta
+		if weapon_swap_t <= 0.0 and p.switch_t <= 0.0:
+			weapon_swap_t = 0.6
+			var want_slot := _best_slot(dist)
+			if want_slot != p.slot:
+				buttons |= Player.BTN_SLOT1 if want_slot == 0 else Player.BTN_SLOT2
+				weapon_swap_t = 1.2
 		var aligned := absf(wrapf(aim_yaw - want_yaw + err_yaw, -PI, PI)) < 0.09
-		if fire_t <= 0.0 and dist < float(prof["range"]) and aligned and p.ammo > 0 and p.reload_t <= 0.0:
+		var wrange := minf(float(prof["range"]), float(Weapons.get_data(p.weapon_id)["range"]) * 1.6)
+		if fire_t <= 0.0 and dist < wrange and aligned and p.ammo > 0 and p.reload_t <= 0.0 and p.switch_t <= 0.0 and (buttons & (Player.BTN_SLOT1 | Player.BTN_SLOT2)) == 0:
 			buttons |= Player.BTN_FIRE
 			fire_t = float(prof["fire_gap"]) * rng.randf_range(0.8, 1.3)
 		if p.ammo == 0:
@@ -121,26 +162,51 @@ func think(delta: float) -> void:
 		if move != Vector2.ZERO:
 			aim_yaw = lerp_angle(aim_yaw, path_yaw, minf(1.0, delta * 6.0))
 		aim_pitch = lerpf(aim_pitch, 0.0, minf(1.0, delta * 4.0))
-		if p.ammo < Player.MAG_SIZE and p.reload_t <= 0.0 and rng.randf() < 0.02:
+		if p.ammo < int(Weapons.get_data(p.weapon_id)["mag"]) and p.reserve > 0 and p.reload_t <= 0.0 and rng.randf() < 0.02:
 			buttons |= Player.BTN_RELOAD
 		if move != Vector2.ZERO and goal_kind in ["core", "site", "beacon", "shard", "rotate", "escort", "investigate", "chase", "stabilize"]:
 			buttons |= Player.BTN_SPRINT
 	if arrived and goal_kind in ["plant", "defuse"]:
 		buttons |= Player.BTN_INTERACT
 		move = Vector2.ZERO
-	# stuck detection: hop and repath
+	# stuck detection: replan first, then sidestep, a single jump at most, then abandon the goal
+	if sidestep_t > 0.0:
+		sidestep_t -= delta
+		move = Vector2(sidestep_dir, 0.4)
 	if move != Vector2.ZERO:
 		stuck_t += delta
-		if stuck_t > 1.4:
-			if p.global_position.distance_to(stuck_pos) < 0.4:
-				buttons |= Player.BTN_JUMP
+		if stuck_t > 1.2:
+			if p.global_position.distance_to(stuck_pos) < 0.5:
+				stuck_count += 1
 				path = PackedVector3Array()
 				repath_t = 0.0
+				if stuck_count == 2:
+					sidestep_t = 0.6
+					sidestep_dir = -1.0 if rng.randf() < 0.5 else 1.0
+				elif stuck_count == 3 and not jumped_this_goal:
+					buttons |= Player.BTN_JUMP
+					jumped_this_goal = true
+					Game.log_ev("Bot", "stuck_jump", {"id": p.id, "pos": [snappedf(p.global_position.x, 0.1), snappedf(p.global_position.z, 0.1)]})
+				elif stuck_count >= 4:
+					blocked_goals.append({"pos": goal, "until": Time.get_ticks_msec() / 1000.0 + 12.0})
+					if blocked_goals.size() > 8:
+						blocked_goals.pop_front()
+					Game.log_ev("Bot", "goal_abandoned", {"id": p.id, "goal": [snappedf(goal.x, 0.1), snappedf(goal.y, 0.1), snappedf(goal.z, 0.1)], "kind": goal_kind})
+					goal_kind = ""
+					stuck_count = 0
+					decide_t = 0.0
+			else:
+				stuck_count = 0
 			stuck_t = 0.0
 			stuck_pos = p.global_position
 	else:
 		stuck_t = 0.0
 		stuck_pos = p.global_position
+	if Game.args.has("bot-trace"):
+		trace_t -= delta
+		if trace_t <= 0.0:
+			trace_t = 4.0
+			Game.log_ev("BotTrace", "state", {"id": p.id, "team": p.team, "pos": [snappedf(p.global_position.x, 0.1), snappedf(p.global_position.y, 0.1), snappedf(p.global_position.z, 0.1)], "goal": [snappedf(goal.x, 0.1), snappedf(goal.y, 0.1), snappedf(goal.z, 0.1)], "kind": goal_kind, "target": target.id if target != null else 0, "engaging": engaging, "path": path.size()})
 	if want_ability:
 		buttons |= Player.BTN_ECHO
 		want_ability = false
@@ -206,9 +272,26 @@ func _has_los(other: Player) -> bool:
 
 
 # ---------------------------------------------------------------- decisions
+## Called when the bot respawns: forget the path and target from before the death so it does not resume a stale route.
+func on_respawn() -> void:
+	path = PackedVector3Array()
+	path_i = 0
+	goal_kind = ""
+	target = null
+	stuck_t = 0.0
+	stuck_pos = p.global_position
+	stuck_count = 0
+	decide_t = 0.0
+
+
 func _decide() -> void:
 	var ms := Game.match_server
 	if ms == null:
+		return
+	if Game.args.has("bot-goal"):
+		# test hook: every bot walks to one point (x,y,z), e.g. to exercise ladders and stairs
+		var v := str(Game.args["bot-goal"]).split(",")
+		_set_goal(Vector3(float(v[0]), float(v[1]), float(v[2])), "patrol")
 		return
 	var rules = ms.rules
 	if rules == null:
@@ -223,10 +306,26 @@ func _decide() -> void:
 
 
 func _set_goal(pos: Vector3, kind: String) -> void:
-	if goal_kind != kind or goal.distance_to(pos) > 2.0:
+	# Root-cause fix for the "jumping at the tower" loop: goals are snapped to the closest point of the
+	# navigation mesh, so a target inside a collider (e.g. the old Relic beacon inside the central
+	# obelisk) becomes the nearest reachable spot instead of an unreachable point the bot walks into.
+	var nav_pos := pos
+	var map_rid := p.get_world_3d().navigation_map
+	if NavigationServer3D.map_get_iteration_id(map_rid) > 0:
+		nav_pos = NavigationServer3D.map_get_closest_point(map_rid, pos)
+		if nav_pos == Vector3.ZERO and pos.length() > 1.0:
+			nav_pos = pos
+	var now := Time.get_ticks_msec() / 1000.0
+	for b in blocked_goals:
+		if float(b["until"]) > now and Vector3(b["pos"]).distance_to(nav_pos) < 2.5:
+			return
+	if goal_kind != kind or goal.distance_to(nav_pos) > 2.0:
 		path = PackedVector3Array()
 		repath_t = 0.0
-	goal = pos
+		stuck_count = 0
+		jumped_this_goal = false
+	raw_goal = pos
+	goal = nav_pos
 	goal_kind = kind
 
 
@@ -320,10 +419,16 @@ func _decide_hotreturn(rules) -> void:
 			_set_goal(st, "stabilize")
 			return
 		if mode == "cradle" or mode == "dropped" or mode == "locked":
-			if _closest_attacker_to(core_pos, rules) == p.id or rng.randf() < 0.3:
+			var lead_id := _closest_attacker_to(core_pos, rules)
+			if lead_id == p.id or rng.randf() < 0.2:
 				_set_goal(core_pos, "core")
 			else:
-				_set_goal(core_pos + _orbit_offset(7.0), "escort")
+				# push as a group: supporting attackers stay a few metres off the lead attacker
+				var lead: Player = Game.players.get(lead_id)
+				if lead != null and is_instance_valid(lead) and lead.alive:
+					_set_goal(lead.global_position + _orbit_offset(4.0), "escort")
+				else:
+					_set_goal(core_pos + _orbit_offset(7.0), "escort")
 			return
 		if mode == "carried":
 			var c: Player = Game.players.get(int(core["carrier"]))
@@ -341,7 +446,7 @@ func _decide_hotreturn(rules) -> void:
 		if mode == "stabilized" or mode == "detonated":
 			return
 		_set_goal(core_pos + _orbit_offset(3.0), "chase")
-		var ticking := mode == "carried" or mode == "dropped"
+		var ticking := mode == "carried"   # a dropped Core is paused, so Fast-Forward would do nothing
 		if ticking and not p.ff_spent and p.global_position.distance_to(core_pos) < 7.0:
 			var chance: float = {"easy": 0.15, "medium": 0.45, "hard": 0.8}.get(difficulty, 0.4)
 			if rng.randf() < chance:
@@ -410,10 +515,16 @@ func _follow(delta: float) -> Dictionary:
 		return {"move": Vector2.ZERO, "yaw": aim_yaw, "arrived": true}
 	if path.is_empty() or repath_t <= 0.0:
 		var map_rid := p.get_world_3d().navigation_map
-		path = NavigationServer3D.map_get_path(map_rid, p.global_position, goal, true)
+		# navigation layer 2 holds the ladder links: open to everyone except a Core carrier (two hands on the Core)
+		path = NavigationServer3D.map_get_path(map_rid, p.global_position, goal, true, 1 if p.carrying_core else 3)
 		path_i = 0
 		repath_t = rng.randf_range(0.7, 1.1)
-	var next := goal
+	var next := goal if path.is_empty() else path[path.size() - 1]
+	if not path.is_empty():
+		var end := path[path.size() - 1]
+		if Vector2(end.x, end.z).distance_to(here) < arrive_r and absf(end.y - p.global_position.y) < 2.5 and Vector2(end.x, end.z).distance_to(flat_goal) > arrive_r:
+			# the reachable end of the path is as close as the bot can get: treat it as arrival
+			return {"move": Vector2.ZERO, "yaw": aim_yaw, "arrived": true}
 	while path_i < path.size():
 		var wp := path[path_i]
 		if Vector2(wp.x, wp.z).distance_to(here) < 1.0:

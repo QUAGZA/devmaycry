@@ -6,7 +6,7 @@ PASS = run and observed in a log or screenshot under `build/`. NOT RUN = needs a
 
 | ID | Test | Evidence |
 |---|---|---|
-| U | 75 unit checks: EchoBuffer (6 s window, absolute sampling), Corebreak match structure (side swap, first to 3, overtime pairs), Hot Return resolve priority and volatility math (field allowance, exhaustion mid-tick, Fast-Forward only outside fields, history interpolation, route exposure), Relic rules, weapon recoil bounds / spread / falloff | `tests/run_tests.gd` |
+| U | 78 unit checks: EchoBuffer (6 s window, absolute sampling), Corebreak match structure (side swap, first to 3, overtime pairs), Hot Return resolve priority and volatility math (field allowance, exhaustion mid-tick, Fast-Forward only outside fields, history interpolation, route exposure), Relic rules, weapon recoil bounds / spread / falloff | `tests/run_tests.gd` |
 | M1 | Spectator obstruction reproduced then fixed; settings round-trip across two launches; window probe | `build/shots/spectator_before_1_09.png`, `spectator_after_1_09.png`, `settings_w.log`, `settings_r.log` |
 | M2 | Host + 2 clients + bots, snapshots agree, no script errors | `tools/net_test.ps1` PASS (`net_*.log`) |
 | M3a | Direct carry detonates 26 s after pickup short of the Stabilizer | `hr_direct_host.log` |
@@ -29,6 +29,23 @@ PASS = run and observed in a log or screenshot under `build/`. NOT RUN = needs a
 | V5 | Settings v2 round trip (preset, window mode, AA, shadows, textures, effects) in an isolated file; player file checksum unchanged by test runs | session log |
 | V6 | Performance at 1080p High with bots on all maps (214-279 FPS) | `final_*.log`, `perf_*.log` |
 | V7 | Exported exe (141 MB) host + client with bots, no script errors | `exe3_host.log`, `exe4_host.log`, `exe4_client.log` |
+| W1 | Map redesign probes (engine): carry routes, reachability, features, perimeter, sightlines on the three maps | `tools/map_checks.ps1`, `build/logs/check_*` |
+| W2 | Reverse Entropy retrieval on each new map: replay hits an exposed defender once, wall blocks it (6 scenarios) | `tools/retrieve_test.ps1`, `retr_*_host.log` |
+| W3 | Zipline: HALL A ridden four times in a row with clear landings; Oracle gate pair six teleports both ways; Core carrier refused by a gate | `zip_ride.log`, `gate_pingpong.log`, `gate_oracle2.log` |
+| W4 | Ladders: autopilot climbs and descends Oracle CA and Tideline hall ladders; foot exit fixed | `ladder_oracle2.log`, `zip_ride.log` |
+| W5 | Startup sequence: full 6.7 s, short 1.3 s on the second launch, skip logic ends 0.32 s after the skip | `intro_full.log`, `intro_fast.log`, `intro_skip.log` |
+| W6 | Music lifecycle in a real process: menu start, fade-out when the match loads, stop, resume from the saved position on return, never more than one player; 11 headless music checks | `music_flow.log`, `tests/music_test.gd` |
+| W7 | Bot soak (130 s, 3v3, medium) on the three maps: rounds, kills, pickups, ladder use, no stuck recoveries, no script errors | `bot_soak.txt` |
+| W8 | Black-speckle detector over 15 captures: 0 isolated dark pixels (control: 379 of 400 injected found) | `tools/speck_check.py` |
+| W9 | Performance 1920x1080: 239-333 FPS (Oracle), 237-325 (Tideline), 291-324 (Foundry) while focused; 30 FPS when Windows deprioritises an unfocused window | `perf_*.log`, `perf6.log` |
+
+## Team respawns with invulnerability (actually run, 2026-10-24)
+
+- `--respawn-selftest` (Game.gd, real damage path, 37 checks per map, 0 failures on Oracle Gardens, Tideline Exchange and Vector Foundry; one human-slot player on Cobalt and bots on both teams): dies, cannot fire while dead, respawns with 100 HP within 2 m of a spawn of its own team and not inside geometry, damage refused while protected, `ProjectileManager.fire` returns 0 while protected, no objective progress while protected, can move, still protected at 2.7 s, protection ended by 3.3 s, takes and deals damage afterwards. Logs: `build/logs/respawn_selftest_<map>.log`.
+- Bot soak 150 s per map (`tools/bot_soak.ps1`): 0 script errors, 0 stuck recoveries, 0 rounds ended by elimination, respawns 8/11/17 for 8/13/17 kills (the difference is respawns still pending when a round ended). `build/logs/bot_soak_respawn.txt`.
+- Relic Rush headless run: 9 respawns, each with protect 3.0 at an FFA spawn. `build/logs/relic_respawn.log`.
+- Unit tests 78/78. Windowed 1600x900 capture confirmed the HUD ("RESPAWNING IN 2" while dead, "INVULNERABLE - 2S" after).
+- NOT run: a second machine / LAN client respawning, a human on Vermilion, the shield mesh as seen by another human player, hands-on feel of the 3 s window.
 
 ## Manual checklist (NOT RUN by the agent)
 
@@ -50,5 +67,5 @@ PASS = run and observed in a log or screenshot under `build/`. NOT RUN = needs a
 ## Known limitations
 
 - Clients run one physics tick plus interpolation behind the server (fine on LAN).
-- Bots use ramps and launch pads they step on; they do not plan through gates or ziplines.
+- Bots plan over stairs and ladder links (not carrying); they do not plan through gates, ziplines or launch pads.
 - Two-machine LAN and human playtests were not possible from this session.

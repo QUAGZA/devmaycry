@@ -16,6 +16,10 @@ const BTN_SLOT1 := 512
 const BTN_SLOT2 := 1024
 const BTN_SLOT3 := 2048
 const BTN_SLOT4 := 4096
+## Two-slot loadout: SLOT1/SLOT2 select the equipped weapons, PREV/NEXT are the mouse wheel (SLOT3/SLOT4 are unused).
+const BTN_PREV := 8192
+const BTN_NEXT := 16384
+const BTN_DROP := 32768           # G: the Core carrier puts the Core down
 
 const WALK_SPEED := 6.0
 const SPRINT_SPEED := 8.6
@@ -36,6 +40,8 @@ const WEAPON_RANGE := 120.0
 const STAND_HEIGHT := 1.6
 const STEP_HEIGHT := 0.55
 const CROUCH_HEIGHT := 1.05
+## Seconds of protection after a respawn: the single source for every mode and every check below.
+const RESPAWN_PROTECT := 3.0
 const MASK_SHOT := 1 | 2 | 4 | 32
 const TEMPORAL_LAYER := 32
 const F_ALIVE := 1
@@ -79,6 +85,13 @@ var interact_held := false
 var carrying_core := false
 var frozen := false
 var zip_t := 0.0
+var ladder_t := 0.0                 # > 0 while inside a ladder volume (set by Features.Ladder)
+var interact_buffer_t := 0.0         # a tap of E stays 'held' for a moment so a short press still attaches (zipline)
+var ladder_ignore_t := 0.0            # > 0 right after stepping off a ladder's foot (the volume cannot re-grab)
+var ladder_base_y := 0.0           # floor height at the foot of the ladder the player is on
+var ladder_out := Vector3.FORWARD
+var ladder_top := 0.0
+const CLIMB_SPEED := 4.2
 var launch_t := 0.0
 var rewind_t := 0.0
 var rewind_total := 6.0
@@ -100,9 +113,17 @@ var spray := 0.0
 var spray_t := 0.0
 var ads := false
 var switch_t := 0.0
+## Two equipped weapons (distinct ids from Weapons.ARMORY) and the active slot index; weapon_id == loadout[slot].
+var loadout: Array = ["rifle", "deagle"]
+var slot := 0
+var cd_store: Dictionary = {}     # weapon id -> fire cooldown left while it is holstered (no swap-cancel of rate of fire)
+var _wheel_hold := 0              # physics frames the wheel button bit stays set (survives a dropped unreliable input packet)
+var _wheel_bit := 0
+var _built := false
 var viewmodels: Dictionary = {}
 var _fov_target := 86.0
 var brain = null
+var shield: MeshInstance3D          # translucent teal respawn shield, other players' view only
 var _local := false
 var _net_pos := Vector3.ZERO
 var _net_prev := Vector3.ZERO
@@ -160,6 +181,23 @@ func _init() -> void:
 	body_mesh.material_override = body_mat
 	body_mesh.visible = false
 	add_child(body_mesh)
+	shield = MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 1.05
+	sm.height = 2.3
+	sm.radial_segments = 28
+	sm.rings = 14
+	shield.mesh = sm
+	var shm := ShaderMaterial.new()
+	shm.shader = load("res://src/shaders/fx_bubble.gdshader")
+	shm.set_shader_parameter("tint", Color("48E0C1"))
+	shm.set_shader_parameter("fade", 0.55)
+	shm.set_shader_parameter("body", 0.04)
+	shield.material_override = shm
+	shield.position = Vector3(0, 0.95, 0)
+	shield.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	shield.visible = false
+	add_child(shield)
 	rig = TacticalRig.new()
 	rig.name = "Rig"
 	add_child(rig)
@@ -192,6 +230,7 @@ func _init() -> void:
 	viewmodel.visible = false
 	cam.add_child(viewmodel)
 	_build_viewmodel()
+	_built = true
 	_reset_ammo()
 	tag = Label3D.new()
 	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -238,43 +277,55 @@ func _build_viewmodel() -> void:
 	if fp_arms.ok:
 		fp_arms.position = FP_BODY_OFFSET
 		_vm_base = Vector3.ZERO
-		for wid in Weapons.ORDER:
-			var w := WeaponModels.build(wid)
-			if w == null:
-				continue
-			w.name = wid
-			w.scale = Vector3.ONE * 0.32
-			w.position = FP_GRIP_OFFSET
-			w.visible = wid == weapon_id
-			fp_arms.weapon_root.add_child(w)
-			viewmodels[wid] = w
+		for wid in loadout:
+			_ensure_viewmodel(wid)
 		return
 	fp_arms.queue_free()
 	fp_arms = null
+	for wid in loadout:
+		_ensure_viewmodel(wid)
+
+
+## Builds the first-person model for one weapon once (never duplicated); only equipped weapons are built.
+func _ensure_viewmodel(wid: String) -> void:
+	if viewmodels.has(wid) and is_instance_valid(viewmodels[wid]):
+		return
+	if _built and not _local:
+		return   # other players never show a first-person model: their weapon is drawn on the rig
+	if fp_arms != null and fp_arms.ok:
+		var w := WeaponModels.build(wid)
+		if w == null:
+			return
+		w.name = wid
+		w.scale = Vector3.ONE * 0.32
+		w.position = FP_GRIP_OFFSET
+		w.visible = wid == weapon_id
+		fp_arms.weapon_root.add_child(w)
+		viewmodels[wid] = w
+		return
 	var sleeve := Style.surface("cloth", Color("3A4150"))
 	var cuff := Style.surface("gear", Color("2B2E2B"))
 	var glove := Style.surface("gear", Color("50473C"))
-	for wid in Weapons.ORDER:
-		var root := Node3D.new()
-		root.name = wid
-		var w := WeaponModels.build(wid)
-		if w == null:
-			continue
-		w.scale = Vector3.ONE * 0.42
-		root.add_child(w)
-		var length: float = float(w.get_meta("length", 0.8)) * 0.42
-		# right hand on the grip, forearm running back and down out of frame
-		var grip := Vector3(0.0, -0.075, 0.06)
-		_limb(root, grip + Vector3(0.0, -0.01, 0.02), grip + Vector3(0.12, -0.2, 0.42), 0.042, sleeve)
-		_limb(root, grip + Vector3(0.0, -0.005, 0.02), grip + Vector3(0.02, -0.03, 0.1), 0.046, cuff)
-		_hand(root, grip, glove)
-		# support hand on the fore-end, forearm crossing in from the lower left
-		var fore := Vector3(0.0, -0.05, -length * 0.38)
-		_limb(root, fore + Vector3(-0.01, -0.02, 0.03), fore + Vector3(-0.24, -0.26, 0.4), 0.04, sleeve)
-		_hand(root, fore, glove)
-		root.visible = wid == weapon_id
-		viewmodel.add_child(root)
-		viewmodels[wid] = root
+	var root := Node3D.new()
+	root.name = wid
+	var w2 := WeaponModels.build(wid)
+	if w2 == null:
+		return
+	w2.scale = Vector3.ONE * 0.42
+	root.add_child(w2)
+	var length: float = float(w2.get_meta("length", 0.8)) * 0.42
+	# right hand on the grip, forearm running back and down out of frame
+	var grip := Vector3(0.0, -0.075, 0.06)
+	_limb(root, grip + Vector3(0.0, -0.01, 0.02), grip + Vector3(0.12, -0.2, 0.42), 0.042, sleeve)
+	_limb(root, grip + Vector3(0.0, -0.005, 0.02), grip + Vector3(0.02, -0.03, 0.1), 0.046, cuff)
+	_hand(root, grip, glove)
+	# support hand on the fore-end, forearm crossing in from the lower left
+	var fore := Vector3(0.0, -0.05, -length * 0.38)
+	_limb(root, fore + Vector3(-0.01, -0.02, 0.03), fore + Vector3(-0.24, -0.26, 0.4), 0.04, sleeve)
+	_hand(root, fore, glove)
+	root.visible = wid == weapon_id
+	viewmodel.add_child(root)
+	viewmodels[wid] = root
 
 
 ## Cylinder limb between two points in viewmodel space.
@@ -302,28 +353,81 @@ func _hand(parent: Node3D, at: Vector3, mat: Material) -> void:
 	_vm_box(parent, Vector3(0.02, 0.02, 0.06), at + Vector3(-0.028, 0.022, -0.012), mat)
 
 
+## Full ammunition for every weapon and the primary slot selected. Called on every (re)spawn:
+## a respawn or round start always refills both magazines and reserves and equips slot 1.
 func _reset_ammo() -> void:
 	ammo_state.clear()
 	for wid in Weapons.ORDER:
 		var w := Weapons.get_data(wid)
 		ammo_state[wid] = {"mag": int(w["mag"]), "reserve": int(w["reserve"])}
+	cd_store.clear()
+	slot = 0
+	weapon_id = str(loadout[0])
 	ammo = int(ammo_state[weapon_id]["mag"])
 	reserve = int(ammo_state[weapon_id]["reserve"])
 	spray = 0.0
 
 
-func _switch_weapon(wid: String) -> void:
-	if wid == weapon_id or not Weapons.DATA.has(wid):
-		return
+## Stores the active weapon's live counters and returns the full per-weapon table (current slot included).
+func ammo_of(wid: String) -> Dictionary:
+	if wid == weapon_id:
+		return {"mag": ammo, "reserve": reserve}
+	return ammo_state.get(wid, {"mag": 0, "reserve": 0})
+
+
+## Server (and local bookkeeping): equip two distinct weapons. Invalid or duplicate picks are replaced by the
+## default loadout. The weapon in hand stays in hand if it is still equipped; otherwise slot 1 is drawn.
+## Magazines and reserves are untouched (a newly equipped weapon starts with whatever its table holds).
+func set_loadout(picks: Array) -> void:
+	var clean := Loadout.sanitize(picks)
 	ammo_state[weapon_id] = {"mag": ammo, "reserve": reserve}
+	var keep := weapon_id if clean.has(weapon_id) else str(clean[0])
+	loadout = clean
+	for wid in loadout:
+		_ensure_viewmodel(wid)
+	if keep != weapon_id:
+		reload_t = 0.0
+		weapon_id = keep
+		ammo = int(ammo_state[keep]["mag"])
+		reserve = int(ammo_state[keep]["reserve"])
+		spray = 0.0
+		fire_cd = 0.0
+		switch_t = 0.0
+	slot = loadout.find(weapon_id)
+	_update_viewmodel()
+
+
+## Slot index 0/1. Returns true if a switch started.
+func switch_slot(i: int) -> bool:
+	if i < 0 or i >= loadout.size():
+		return false
+	return _switch_weapon(str(loadout[i]))
+
+
+func _switch_weapon(wid: String) -> bool:
+	if wid == weapon_id or not Weapons.DATA.has(wid) or not loadout.has(wid):
+		return false
+	# the outgoing weapon keeps its magazine and reserve; an unfinished reload is cancelled, not completed
+	ammo_state[weapon_id] = {"mag": ammo, "reserve": reserve}
+	cd_store[weapon_id] = fire_cd
 	weapon_id = wid
+	slot = loadout.find(wid)
 	ammo = int(ammo_state[wid]["mag"])
 	reserve = int(ammo_state[wid]["reserve"])
 	reload_t = 0.0
+	_was_reloading = false
+	if fp_arms != null:
+		fp_arms.cancel_reload()
 	spray = 0.0
+	spray_t = 0.0
+	ads = false
 	switch_t = float(Weapons.get_data(wid)["switch"])
-	fire_cd = maxf(fire_cd, switch_t)
+	fire_cd = maxf(float(cd_store.get(wid, 0.0)), switch_t)
+	cd_store.erase(wid)
+	_ensure_viewmodel(wid)
+	_update_viewmodel()
 	Game.rpc_fx.rpc("switch", id, global_position)
+	return true
 
 
 func _update_viewmodel() -> void:
@@ -377,8 +481,13 @@ func eye_position() -> Vector3:
 
 # ---------------------------------------------------------------- input (local)
 func _unhandled_input(event: InputEvent) -> void:
-	if not _local or Game.paused_local:
+	if not _local or Game.paused_local or Game.armory_open:
 		return
+	if _wheel_hold <= 0 and event is InputEventMouseButton and event.pressed and _mouse_ok():
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			wheel_input(-1)
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			wheel_input(1)
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var sens := Settings.mouse_sensitivity * (Player.ff_sens_mult() if ff_until > 0.0 else 1.0)
 		yaw -= event.relative.x * sens
@@ -386,10 +495,23 @@ func _unhandled_input(event: InputEvent) -> void:
 		yaw = wrapf(yaw, -PI, PI)
 
 
+## Mouse wheel: -1 (up) selects the previous slot, +1 (down) the next; with two slots both cycle to the other weapon.
+## The request travels as a button bit that is held a few physics frames so one dropped packet cannot lose it.
+func wheel_input(dir: int) -> void:
+	_wheel_bit = BTN_NEXT if dir > 0 else BTN_PREV
+	_wheel_hold = 4
+
+
+## Mouse captured (headless peers have no mouse and are treated as captured so scripted tests drive the real path).
+func _mouse_ok() -> bool:
+	return Input.mouse_mode == Input.MOUSE_MODE_CAPTURED or DisplayServer.get_name() == "headless"
+
+
 func gather_input() -> Array:
 	if Game.autopilot != null:
 		return Game.autopilot.produce(self)
-	if Game.paused_local or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+	if Game.paused_local or Game.armory_open or not _mouse_ok():
+		_wheel_hold = 0
 		return [Vector2.ZERO, yaw, pitch, 0]
 	var move := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var b := 0
@@ -415,10 +537,11 @@ func gather_input() -> Array:
 		b |= BTN_SLOT1
 	if Input.is_action_just_pressed("slot2"):
 		b |= BTN_SLOT2
-	if Input.is_action_just_pressed("slot3"):
-		b |= BTN_SLOT3
-	if Input.is_action_just_pressed("slot4"):
-		b |= BTN_SLOT4
+	if _wheel_hold > 0:
+		_wheel_hold -= 1
+		b |= _wheel_bit
+	if Input.is_action_pressed("drop_core"):
+		b |= BTN_DROP
 	return [move, yaw, pitch, b]
 
 
@@ -441,6 +564,8 @@ func server_step(delta: float) -> void:
 	head.rotation.x = pitch
 	var pressed := inp_buttons & ~_prev_buttons
 	_prev_buttons = inp_buttons
+	if (pressed & BTN_INTERACT) != 0:
+		interact_buffer_t = 0.35
 	if not alive or frozen:
 		velocity = Vector3.ZERO
 		if alive and not is_on_floor():
@@ -453,6 +578,11 @@ func server_step(delta: float) -> void:
 	if rewind_t > 0.0:
 		_step_rewind(delta, pressed)
 		return
+	if ladder_t > 0.0 and not carrying_core:
+		_step_ladder(delta, pressed)
+		return
+	if has_meta("ladder_topped"):
+		remove_meta("ladder_topped")
 	var staggered := stagger_t > 0.0
 	crouching = (inp_buttons & BTN_CROUCH) != 0
 	head.position.y = lerpf(head.position.y, CROUCH_HEIGHT if crouching else STAND_HEIGHT, 12.0 * delta)
@@ -504,9 +634,49 @@ func server_step(delta: float) -> void:
 	interact_held = (inp_buttons & BTN_INTERACT) != 0
 	if (pressed & BTN_ECHO) != 0 and Game.match_server != null:
 		Game.match_server.request_ability(self)
+	if (pressed & BTN_DROP) != 0 and carrying_core and Game.match_server != null and Game.match_server.rules != null and Game.match_server.rules.has_method("request_drop"):
+		Game.match_server.rules.request_drop(self)
 	recorder.push(_now(), global_position, yaw, pitch)
 	if Game.map_def != null and global_position.y < Game.map_def.kill_y and Game.match_server != null:
 		Game.match_server.on_out_of_bounds(self)
+
+
+## Ladder climbing: forward (toward the wall) climbs, backward descends, sideways shuffles, jump
+## pushes off. Near the top the climber is pushed over the lip onto the platform. Carrying the Core
+## disables climbing (two hands on the Core), which keeps carrier routes on stairs and ramps.
+func _step_ladder(delta: float, pressed: int) -> void:
+	ladder_t -= delta
+	var wish := Basis(Vector3.UP, yaw) * Vector3(inp_move.x, 0.0, inp_move.y)
+	var toward := wish.dot(-ladder_out)
+	if toward < -0.25 and is_on_floor() and global_position.y < ladder_base_y + 0.45:
+		# at the foot and still walking away: step off instead of being held on the ladder volume
+		ladder_t = 0.0
+		ladder_ignore_t = 0.5
+		return
+	if (pressed & BTN_JUMP) != 0:
+		velocity = ladder_out * 5.0 + Vector3.UP * 3.5
+		ladder_t = 0.0
+		move_and_slide()
+		return
+	if toward > 0.25:
+		velocity.y = CLIMB_SPEED
+	elif toward < -0.25:
+		velocity.y = -CLIMB_SPEED
+	else:
+		velocity.y = 0.0
+	var side := wish - (-ladder_out) * toward
+	velocity.x = side.x * 2.0
+	velocity.z = side.z * 2.0
+	if global_position.y > ladder_top - 0.15 and toward > 0.25:
+		if velocity.y > 0.0 and not has_meta("ladder_topped"):
+			set_meta("ladder_topped", true)
+			Game.log_ev("Feature", "ladder_top", {"id": id, "y": snappedf(global_position.y, 0.1)})
+		velocity += -ladder_out * 3.5
+		velocity.y = 1.5   # assigned, not max'd: the 4.2 climb speed used to carry the climber 2.4 m above the platform
+	move_and_slide()
+	_weapon_logic(pressed, false)
+	interact_held = (inp_buttons & BTN_INTERACT) != 0
+	recorder.push(_now(), global_position, yaw, pitch)
 
 
 ## Classic stair stepping: if the horizontal move is blocked, try the same move from up to
@@ -591,8 +761,12 @@ func _tick_timers(delta: float) -> void:
 	stagger_t = maxf(0.0, stagger_t - delta)
 	spawn_protect_t = maxf(0.0, spawn_protect_t - delta)
 	zip_t = maxf(0.0, zip_t - delta)
+	ladder_ignore_t = maxf(0.0, ladder_ignore_t - delta)
+	interact_buffer_t = maxf(0.0, interact_buffer_t - delta)
 	launch_t = maxf(0.0, launch_t - delta)
 	switch_t = maxf(0.0, switch_t - delta)
+	for k in cd_store.keys():
+		cd_store[k] = maxf(0.0, float(cd_store[k]) - delta)
 	if spray_t > 0.0:
 		spray_t -= delta
 	else:
@@ -614,15 +788,15 @@ func _start_reload() -> void:
 
 
 func _weapon_logic(pressed: int, staggered: bool) -> void:
-	ads = (inp_buttons & BTN_ADS) != 0
 	if (pressed & BTN_SLOT1) != 0:
-		_switch_weapon("rifle")
+		switch_slot(0)
 	elif (pressed & BTN_SLOT2) != 0:
-		_switch_weapon("shotgun")
-	elif (pressed & BTN_SLOT3) != 0:
-		_switch_weapon("sniper")
-	elif (pressed & BTN_SLOT4) != 0:
-		_switch_weapon("mg")
+		switch_slot(1)
+	elif (pressed & BTN_PREV) != 0:
+		switch_slot(posmod(slot - 1, loadout.size()))
+	elif (pressed & BTN_NEXT) != 0:
+		switch_slot(posmod(slot + 1, loadout.size()))
+	ads = (inp_buttons & BTN_ADS) != 0 and switch_t <= 0.0
 	var w := Weapons.get_data(weapon_id)
 	if reload_t > 0.0 or switch_t > 0.0:
 		return
@@ -630,7 +804,7 @@ func _weapon_logic(pressed: int, staggered: bool) -> void:
 		_start_reload()
 		return
 	var want_fire := (inp_buttons & BTN_FIRE) != 0 if bool(w["auto"]) else (pressed & BTN_FIRE) != 0
-	if want_fire and fire_cd <= 0.0 and not staggered:
+	if want_fire and fire_cd <= 0.0 and not staggered and can_deal_damage():
 		if ammo > 0:
 			_shoot()
 		else:
@@ -652,7 +826,6 @@ func _shoot() -> void:
 	var w := Weapons.get_data(weapon_id)
 	ammo -= 1
 	fire_cd = float(w["rof"])
-	spawn_protect_t = 0.0
 	var moving := Vector3(velocity.x, 0.0, velocity.z).length() > 1.0
 	var sp := Weapons.spread(weapon_id, spray, moving, not is_on_floor(), crouching, ads)
 	var kick := Weapons.recoil(weapon_id, int(spray))
@@ -679,8 +852,21 @@ func trace_shot(from: Vector3, to: Vector3) -> Dictionary:
 
 
 ## Returns true if damage was applied. min_hp stops Echo damage from killing.
+## Central protection rules (respawn shield). Every damage, weapon and objective path asks these.
+func is_protected() -> bool:
+	return alive and spawn_protect_t > 0.0
+
+
+func can_deal_damage() -> bool:
+	return alive and not is_protected()
+
+
+func can_progress_objective() -> bool:
+	return alive and not frozen and not is_protected()
+
+
 func apply_damage(amount: float, from_id: int, cause: String, min_hp: float) -> bool:
-	if not alive or spawn_protect_t > 0.0 or frozen:
+	if not alive or is_protected() or frozen:
 		return false
 	if Game.match_server != null and not Game.match_server.can_damage(from_id, self):
 		return false
@@ -713,7 +899,9 @@ func _die(killer_id: int, cause: String) -> void:
 	zip_t = 0.0
 	launch_t = 0.0
 	rewind_t = 0.0
+	spawn_protect_t = 0.0
 	recorder.clear()
+	Game.rpc_fx.rpc("death", id, global_position)
 	if Game.match_server != null:
 		Game.match_server.on_player_died(self, killer_id, cause)
 
@@ -721,8 +909,7 @@ func _die(killer_id: int, cause: String) -> void:
 func respawn(pos: Vector3, yaw_: float, protect: float) -> void:
 	hp = MAX_HP
 	alive = true
-	weapon_id = "rifle"
-	_reset_ammo()
+	_reset_ammo()   # keeps the loadout, refills both weapons, equips slot 1
 	_update_viewmodel()
 	reload_t = 0.0
 	switch_t = 0.0
@@ -744,6 +931,8 @@ func respawn(pos: Vector3, yaw_: float, protect: float) -> void:
 	head.rotation.x = 0.0
 	last_attacker = 0
 	recorder.clear()
+	if brain != null and brain.has_method("on_respawn"):
+		brain.on_respawn()
 	_net_pos = pos
 	_net_prev = pos
 	_apply_flags_visual()
@@ -790,7 +979,8 @@ func pack_state() -> Array:
 	if ads:
 		f |= F_ADS
 	flags = f
-	return [id, global_position, yaw, pitch, hp, ammo, f, reload_t, dash_cd, echo_cd, stagger_t, spawn_protect_t, velocity, Weapons.ORDER.find(weapon_id), reserve]
+	return [id, global_position, yaw, pitch, hp, ammo, f, reload_t, dash_cd, echo_cd, stagger_t, spawn_protect_t, velocity, Weapons.ORDER.find(weapon_id), reserve,
+		Weapons.ORDER.find(str(loadout[0])), Weapons.ORDER.find(str(loadout[1])), int(ammo_of(str(loadout[1 - slot]))["mag"]), int(ammo_of(str(loadout[1 - slot]))["reserve"])]
 
 
 func apply_state(s: Array) -> void:
@@ -820,10 +1010,23 @@ func apply_state(s: Array) -> void:
 	ads = (flags & F_ADS) != 0
 	if s.size() > 14:
 		var wid: String = Weapons.ORDER[clampi(int(s[13]), 0, Weapons.ORDER.size() - 1)]
+		if s.size() > 18:
+			var l0: String = Weapons.ORDER[clampi(int(s[15]), 0, Weapons.ORDER.size() - 1)]
+			var l1: String = Weapons.ORDER[clampi(int(s[16]), 0, Weapons.ORDER.size() - 1)]
+			if str(loadout[0]) != l0 or str(loadout[1]) != l1:
+				loadout = [l0, l1]
+				for lw in loadout:
+					_ensure_viewmodel(lw)
+				if Game.args.has("log-snap"):
+					Game.log_ev("Armory", "loadout_seen", {"id": id, "loadout": loadout})
 		if wid != weapon_id:
 			weapon_id = wid
+			_ensure_viewmodel(wid)
 			_update_viewmodel()
+		slot = maxi(0, loadout.find(weapon_id))
 		reserve = int(s[14])
+		if s.size() > 18:
+			ammo_state[str(loadout[1 - slot])] = {"mag": int(s[17]), "reserve": int(s[18])}
 	if (old_flags & F_ALIVE) != (flags & F_ALIVE):
 		_apply_flags_visual()
 	if _net_prev.distance_to(_net_pos) > 6.0:
@@ -845,6 +1048,10 @@ func _process(delta: float) -> void:
 		var local_ads := ads if multiplayer.is_server() else (Input.is_action_pressed("ads") and Game.autopilot == null and not Game.paused_local)
 		_fov_target = float(Weapons.get_data(weapon_id)["ads_fov"]) if local_ads and alive else Settings.fov
 		cam.fov = lerpf(cam.fov, _fov_target, minf(1.0, 12.0 * delta))
+		# camera shake: a small jitter that follows the firing kick, scaled by the CAMERA SHAKE setting
+		var shake_amt := _view_kick * Settings.shake * (0.35 if local_ads else 1.0) if alive else 0.0
+		cam.h_offset = randf_range(-1.0, 1.0) * 0.012 * shake_amt
+		cam.v_offset = randf_range(-1.0, 1.0) * 0.012 * shake_amt
 	_update_life_visuals(delta)
 	_update_footsteps(delta)
 	if viewmodel.visible:
@@ -867,6 +1074,9 @@ func _process(delta: float) -> void:
 
 ## Death clip, revive, reload and weapon visuals for the third-person rig (server and clients alike).
 func _update_life_visuals(delta: float) -> void:
+	if not multiplayer.is_server() and spawn_protect_t > 0.0:
+		spawn_protect_t = maxf(0.0, spawn_protect_t - delta)   # smooth countdown between snapshots
+	shield.visible = is_protected() and not _local and not _spectated
 	if alive != _was_alive:
 		_was_alive = alive
 		if not alive:
@@ -898,7 +1108,7 @@ func _animate_viewmodel(delta: float) -> void:
 	var on_ground := is_on_floor() if multiplayer.is_server() else (flags & F_FLOOR) != 0
 	var bob_amt := clampf(hspeed / 8.6, 0.0, 1.0) * (1.0 if on_ground else 0.2) * (0.35 if ads else 1.0)
 	_bob_t += delta * (6.0 + hspeed * 0.9)
-	var bob := Vector3(sin(_bob_t) * 0.012, -absf(cos(_bob_t)) * 0.014, 0.0) * bob_amt * (1.0 if Settings.head_bob else 0.35)
+	var bob := Vector3(sin(_bob_t) * 0.012, -absf(cos(_bob_t)) * 0.014, 0.0) * bob_amt * (1.0 if Settings.head_bob else 0.0)
 	var look := Vector2(yaw, pitch)
 	var dl := look - _sway
 	dl.x = wrapf(dl.x, -PI, PI)

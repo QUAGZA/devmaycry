@@ -13,6 +13,9 @@ signal fx(kind: String, id: int, pos: Vector3)
 signal match_scene_ready
 signal echo_spawned(echo: Node)
 signal results_ready(results: Dictionary)
+signal armory_requested(seconds: float, initial: bool)
+signal armory_ack(picks: Array, accepted: bool, reason: String)
+signal armory_closed
 
 const SNAPSHOT_EVERY := 2
 const MAP_READY_TIMEOUT := 20.0
@@ -35,10 +38,29 @@ var match_server: MatchServer = null
 var autopilot = null
 var projectiles: ProjectileManager = null
 var paused_local := false
+var armory_open := false           # the local armory screen is up: mouse free, no combat input
+var armory: ArmoryFlow = null      # server only: the pre-match loadout phase
 var map_open := false
 var echoes: Dictionary = {}
 var props: Dictionary = {}
 var menu_message := ""
+var _prompt := ""
+var _prompt_frame := -10
+
+
+## Contextual interaction prompt (zipline, gate, ladder): features set it each frame while the local player is in
+## range; the HUD shows it only while it is fresh.
+func set_prompt(text: String) -> void:
+	_prompt = text
+	_prompt_frame = Engine.get_process_frames()
+
+
+func current_prompt() -> String:
+	return _prompt if Engine.get_process_frames() - _prompt_frame <= 2 else ""
+
+
+var cli_consumed := false          # command-line roles (--role=host ...) run once; after a match the menu simply stays on the menu
+var intro_done := false            # the startup sequence already ran in this session (it never replays after a match)
 var open_lobby_on_menu := false
 var _map_ready: Dictionary = {}
 var _map_ready_t := 0.0
@@ -46,6 +68,7 @@ var _waiting_spawn := false
 var _quit_t := -1.0
 var _shots: Array = []
 var _shot_elapsed := 0.0
+var shots_done := 0               # screenshots saved so far (review cameras switch on it)
 var _log_snap_t := 0.0
 var _probed := false
 var _window_logged := false
@@ -94,8 +117,10 @@ var _perf_worst := 0.0
 
 ## --perf: uncapped frame rate, logs average FPS, worst frame, draw calls and objects every 5 s.
 func _perf(delta: float) -> void:
-	if _perf_t == 0.0 and _perf_frames == 0:
+	# re-assert every frame: Settings.apply_graphics() at match start restores the player's cap/VSync
+	if Engine.max_fps != 0:
 		Engine.max_fps = 0
+	if DisplayServer.window_get_vsync_mode() != DisplayServer.VSYNC_DISABLED:
 		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	_perf_t += delta
 	_perf_frames += 1
@@ -103,7 +128,8 @@ func _perf(delta: float) -> void:
 	if _perf_t >= 5.0:
 		log_ev("Perf", "sample", {"map": map_id, "fps": snappedf(_perf_frames / _perf_t, 0.1), "worst_ms": snappedf(_perf_worst * 1000.0, 0.1),
 			"draw_calls": Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME), "objects": Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME),
-			"vram_mb": snappedf(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0, 1), "players": players.size(), "projectiles": projectiles.live.size() if projectiles != null else 0})
+			"vram_mb": snappedf(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0, 1), "players": players.size(), "projectiles": projectiles.live.size() if projectiles != null else 0,
+			"vsync": DisplayServer.window_get_vsync_mode(), "focused": DisplayServer.window_is_focused(), "max_fps": Engine.max_fps, "win_mode": DisplayServer.window_get_mode(), "nodes": Performance.get_monitor(Performance.OBJECT_NODE_COUNT), "orphans": Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT), "audio_latency": snappedf(Performance.get_monitor(Performance.AUDIO_OUTPUT_LATENCY) * 1000.0, 0.1), "process_ms": snappedf(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0, 0.01), "physics_ms": snappedf(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0, 0.01), "nav_ms": snappedf(Performance.get_monitor(Performance.TIME_NAVIGATION_PROCESS) * 1000.0, 0.01) if Performance.has_method("get_monitor") else 0.0})
 		_perf_t = 0.0
 		_perf_frames = 0
 		_perf_worst = 0.0
@@ -166,6 +192,7 @@ func rpc_load_map(map_id_: String, mode_id_: String) -> void:
 	results = {}
 	_clear_match_nodes()
 	_shot_elapsed = 0.0
+	Music.fade_out()
 	get_tree().change_scene_to_file("res://src/match/Match.tscn")
 
 
@@ -181,6 +208,8 @@ func _clear_match_nodes() -> void:
 	state = {}
 	live = {}
 	spectating = ""
+	armory = null
+	armory_open = false
 	if match_server != null:
 		match_server.queue_free()
 		match_server = null
@@ -235,7 +264,12 @@ func _spawn_all() -> void:
 		var sp: Dictionary = match_server.spawn_for(info, i)
 		rpc_spawn_player.rpc(id, info, sp["position"], sp["yaw"])
 		i += 1
-	match_server.begin()
+	if args.has("no-armory"):
+		match_server.begin()
+	else:
+		# Armory first: the round and match timers start only when every human answered or the timeout hit.
+		armory = ArmoryFlow.new()
+		armory.start(_armory_rng())
 
 
 @rpc("authority", "call_local", "reliable")
@@ -368,7 +402,27 @@ func _physics_process(delta: float) -> void:
 			var pauses := 0.0 if key == "direct" else (7.0 if pts.size() == 3 else 14.0)
 			var e := HotReturnRules.route_exposure(total, pauses)
 			log_ev("Route", key, {"map": map_id, "metres": snappedf(total, 0.1), "carry_s": snappedf(float(e["carry"]), 0.1), "exposure_s": snappedf(float(e["exposure"]), 0.1), "volatility": snappedf(float(e["volatility"]), 0.1), "reachable": ok})
-	if args.has("navprobe") and not _probed and server_tick > 5:
+	if args.has("perimeterprobe") and not _probed and server_tick > 60 and map_def != null:
+		_probed = true
+		_perimeter_probe()
+	if args.has("sightprobe") and not _probed and server_tick > 60 and map_def != null:
+		_probed = true
+		_sight_probe()
+	if args.has("respawn-selftest") and not _probed and match_server != null and match_server.phase == "live" and map_def != null:
+		_probed = true
+		_respawn_selftest()
+	if args.has("armory-selftest") and not _probed and armory != null and armory.active and map_def != null:
+		_probed = true
+		var st := ArmorySelfTest.new()
+		add_child(st)
+		st.run()
+	if args.has("featureprobe") and not _probed and server_tick > 60 and map_def != null:
+		_probed = true
+		_feature_probe()
+	if args.has("reachprobe") and not _probed and server_tick > 60 and map_def != null:
+		_probed = true
+		_reach_probe()
+	if args.has("navprobe") and not _probed and server_tick > 60:
 		_probed = true
 		var map_rid: RID = world.get_world_3d().navigation_map
 		for spec in str(args["navprobe"]).split(";"):
@@ -376,8 +430,11 @@ func _physics_process(delta: float) -> void:
 			var want := Vector3(float(v[0]), float(v[1]), float(v[2]))
 			var closest := NavigationServer3D.map_get_closest_point(map_rid, want)
 			var from := Vector3(float(v[3]), float(v[4]), float(v[5])) if v.size() >= 6 else Vector3.ZERO
-			var path := NavigationServer3D.map_get_path(map_rid, from, want, true)
-			log_ev("Nav", "probe", {"want": [want.x, want.y, want.z], "closest": [snappedf(closest.x, 0.1), snappedf(closest.y, 0.1), snappedf(closest.z, 0.1)], "path_len": path.size(), "path_end": [snappedf(path[path.size() - 1].x, 0.1), snappedf(path[path.size() - 1].y, 0.1), snappedf(path[path.size() - 1].z, 0.1)] if path.size() > 0 else []})
+			var path := NavigationServer3D.map_get_path(map_rid, from, want, true, int(args.get("navlayers", "1")))
+			var metres := 0.0
+			for j in range(1, path.size()):
+				metres += path[j - 1].distance_to(path[j])
+			log_ev("Nav", "probe", {"metres": snappedf(metres, 0.1), "want": [want.x, want.y, want.z], "closest": [snappedf(closest.x, 0.1), snappedf(closest.y, 0.1), snappedf(closest.z, 0.1)], "path_len": path.size(), "path_end": [snappedf(path[path.size() - 1].x, 0.1), snappedf(path[path.size() - 1].y, 0.1), snappedf(path[path.size() - 1].z, 0.1)] if path.size() > 0 else []})
 	if local_player != null and is_instance_valid(local_player):
 		var inp: Array = local_player.gather_input()
 		if multiplayer.is_server():
@@ -389,7 +446,9 @@ func _physics_process(delta: float) -> void:
 		for p in players.values():
 			if is_instance_valid(p):
 				p.server_step(delta)
-		if match_server != null:
+		if armory != null:
+			armory.step(delta)
+		if match_server != null and (armory == null or not armory.active):
 			match_server.step(delta)
 		if server_tick % SNAPSHOT_EVERY == 0:
 			_send_snapshot()
@@ -407,6 +466,242 @@ func _physics_process(delta: float) -> void:
 					var gp: Vector3 = p.global_position
 					d[str(id)] = [snappedf(gp.x, 0.01), snappedf(gp.y, 0.01), snappedf(gp.z, 0.01), int(p.hp), int(p.alive)]
 			log_ev("Snap", "players", {"n": players.size(), "p": d, "time_left": snappedf(time_left, 0.1), "phase": state.get("phase", "")})
+
+
+## --perimeterprobe: from just inside every stretch of the outline, rays fired outward at foot, waist, head and
+## above-head height must hit solid collision within 3 m (walls, rails and their invisible barrier). A miss is a
+## gap a player or bot could walk, jump or be launched through.
+func _perimeter_probe() -> void:
+	var space := world.get_world_3d().direct_space_state
+	var out := map_def.outline
+	var rays := 0
+	var misses: Array = []
+	for i in out.size():
+		var a := out[i]
+		var b := out[(i + 1) % out.size()]
+		var length := a.distance_to(b)
+		var dir := (b - a) / length
+		var n := Vector2(dir.y, -dir.x)
+		if not Geometry2D.is_point_in_polygon(a + (b - a) * 0.5 + n * 0.8, out):
+			n = -n
+		var t := 0.0
+		while t <= length:
+			var p := a + dir * t
+			for h in [0.15, 1.0, 1.7, 3.5]:
+				var origin := Vector3(p.x + n.x * 1.2, h, p.y + n.y * 1.2)
+				var target := Vector3(p.x - n.x * 1.8, h, p.y - n.y * 1.8)
+				rays += 1
+				if space.intersect_ray(PhysicsRayQueryParameters3D.create(origin, target, 1)).is_empty():
+					misses.append([snappedf(p.x, 0.1), h, snappedf(p.y, 0.1)])
+			t += 1.0
+	log_ev("Perimeter", "probe", {"map": map_id, "segments": out.size(), "rays": rays, "misses": misses.size(), "first": misses.slice(0, 8)})
+
+
+## --sightprobe: sightline statistics measured on the real colliders (not the offline plan). Random navmesh points,
+## 48 horizontal rays each at eye height; reports, per level, the share of rays longer than 25 / 35 m and the
+## percentiles of each point's longest ray (80 m = unobstructed to the cap).
+func _sight_probe() -> void:
+	var map_rid: RID = world.get_world_3d().navigation_map
+	var space := world.get_world_3d().direct_space_state
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	var buckets := {"ground": [], "raised": [], "sunken": []}
+	var rays := {"ground": [0, 0, 0], "raised": [0, 0, 0], "sunken": [0, 0, 0]}
+	var long_pts: Array = []
+	for i in 1400:
+		var p := NavigationServer3D.map_get_random_point(map_rid, 3, true)
+		if p.y > 0.8 and p.y < 1.6:
+			continue   # the top of a low rail or parapet is a navmesh strip nobody can reach
+		var bucket := "ground"
+		if p.y > 2.0:
+			bucket = "raised"
+		elif p.y < -1.0:
+			bucket = "sunken"
+		var eye := p + Vector3(0, 1.6, 0)
+		var best := 0.0
+		var best_deg := 0
+		for k in 48:
+			var ang := TAU * float(k) / 48.0
+			var q := PhysicsRayQueryParameters3D.create(eye, eye + Vector3(cos(ang), 0, sin(ang)) * 80.0, 1)
+			var hit := space.intersect_ray(q)
+			var d := 80.0 if hit.is_empty() else eye.distance_to(hit["position"])
+			if d > best:
+				best_deg = int(round(rad_to_deg(ang)))
+			best = maxf(best, d)
+			rays[bucket][0] += 1
+			rays[bucket][1] += 1 if d > 25.0 else 0
+			rays[bucket][2] += 1 if d > 35.0 else 0
+		(buckets[bucket] as Array).append(best)
+		if best >= 79.0 and bucket == "ground" and long_pts.size() < 8:
+			long_pts.append([snappedf(p.x, 0.1), snappedf(p.y, 0.1), snappedf(p.z, 0.1), best_deg])
+	var out := {}
+	for b in buckets:
+		var arr: Array = buckets[b]
+		arr.sort()
+		if arr.size() < 10:
+			continue
+		out[b] = {"points": arr.size(), "p50": snappedf(arr[arr.size() / 2], 0.1), "p90": snappedf(arr[int(arr.size() * 0.9)], 0.1), "p99": snappedf(arr[int(arr.size() * 0.99)], 0.1),
+			"rays_over_25_pct": snappedf(100.0 * rays[b][1] / maxf(1.0, rays[b][0]), 0.1), "rays_over_35_pct": snappedf(100.0 * rays[b][2] / maxf(1.0, rays[b][0]), 0.1)}
+	log_ev("Sight", "probe", {"map": map_id, "levels": out, "unobstructed_ground_points": long_pts})
+
+
+## --respawn-selftest: kills one human and one bot per team through the real damage path, then checks the respawn
+## (own team's spawn list, full health, exactly RESPAWN_PROTECT seconds of protection with no damage taken and no
+## weapon use, normal movement) and the end of protection (damage and fire work again).
+func _respawn_selftest() -> void:
+	var fails := [0]
+	var rep := func(name: String, ok: bool, extra: String = "") -> void:
+		if not ok:
+			fails[0] += 1
+		log_ev("SelfTest", "pass" if ok else "FAIL", {"check": name, "detail": extra})
+	var victims: Array = []
+	for team in [1, 2]:
+		var human: Player = null
+		var bot: Player = null
+		for q: Player in players.values():
+			if is_instance_valid(q) and q.team == team:
+				if q.is_bot and bot == null:
+					bot = q
+				elif not q.is_bot and human == null:
+					human = q
+		for v in [human, bot]:
+			if v != null:
+				victims.append(v)
+	for v: Player in victims:
+		var kind := "bot" if v.is_bot else "human"
+		var tag := "team%d %s" % [v.team, kind]
+		var side := "attack" if v.team == 1 else "defend"
+		v.apply_damage(999.0, -99, "selftest", 0.0)
+		rep.call(tag + ": dies at zero health", not v.alive)
+		rep.call(tag + ": cannot fire while dead", not v.can_deal_damage())
+		await get_tree().create_timer(MatchServer.RESPAWN_DELAY + 0.35).timeout
+		rep.call(tag + ": respawned after the delay with full health", v.alive and is_equal_approx(v.hp, Player.MAX_HP), "hp %s" % v.hp)
+		var near := 1e9
+		for sp in map_def.role_spawns[side]:
+			near = minf(near, (sp["position"] as Vector3).distance_to(v.global_position))
+		rep.call(tag + ": stands on one of its own team's spawn points", near < 2.0, "%.2f m" % near)
+		rep.call(tag + ": spawn is clear of geometry", not Features.blocked(world.get_world_3d(), v.global_position))
+		var hp0 := v.hp
+		var took := v.apply_damage(60.0, -99, "selftest", 0.0)
+		rep.call(tag + ": protected, damage refused", (not took) and is_equal_approx(v.hp, hp0) and v.is_protected(), "protect_t %.2f" % v.spawn_protect_t)
+		rep.call(tag + ": protected player cannot deal damage", not v.can_deal_damage() and projectiles.fire(v.id, "rifle", v.eye_position(), Vector3.FORWARD * 100.0, 24.0, v.get_rid()) == 0)
+		rep.call(tag + ": protected player cannot progress objectives", not v.can_progress_objective())
+		var p0 := v.global_position
+		if not v.is_bot:
+			v.inp_move = Vector2(0, -1)
+		await get_tree().create_timer(1.2).timeout
+		if not v.is_bot:
+			rep.call(tag + ": can move while protected", Vector2(v.global_position.x - p0.x, v.global_position.z - p0.z).length() > 1.0 or v.velocity.length() > 0.5, "moved %.1f m" % p0.distance_to(v.global_position))
+		# protection must still be running just before 3 s and gone just after
+		await get_tree().create_timer(2.7 - 0.35 - 1.2).timeout
+		rep.call(tag + ": still protected just before 3 s", v.is_protected(), "protect_t %.2f" % v.spawn_protect_t)
+		await get_tree().create_timer(0.6).timeout   # about 3.3 s after the respawn
+		rep.call(tag + ": protection ended after 3 s", not v.is_protected(), "protect_t %.2f" % v.spawn_protect_t)
+		var hp1 := v.hp
+		var took2 := v.apply_damage(10.0, -99, "selftest", 0.0)
+		rep.call(tag + ": takes damage normally afterwards", took2 and v.hp < hp1)
+		rep.call(tag + ": can deal damage again", v.can_deal_damage() and projectiles.fire(v.id, "rifle", v.eye_position(), Vector3.FORWARD * 100.0, 24.0, v.get_rid()) > 0)
+		v.hp = Player.MAX_HP
+	log_ev("SelfTest", "done", {"map": map_id, "mode": mode_id, "victims": victims.size(), "failures": fails[0]})
+
+
+## --featureprobe: sweep every zipline with the player capsule, check both anchors and every gate's exit for room.
+func _feature_probe() -> void:
+	var results: Array = []
+	var bad := 0
+	for fe in map_def.features.get_children():
+		if fe is Features.Zipline:
+			var r: Dictionary = fe.validate()
+			results.append(r)
+			if not bool(r["ok"]):
+				bad += 1
+		elif fe is Features.PhaseGate:
+			var r2: Dictionary = fe.validate()
+			results.append(r2)
+			if not bool(r2["ok"]):
+				bad += 1
+	# negative control: a capsule placed inside the first solid box block of the map must report blocked
+	var control := false
+	for body in map_def.geometry.get_children():
+		if body is StaticBody3D and body.get_child_count() > 0 and (body.get_child(0) as CollisionShape3D).shape is BoxShape3D:
+			var bs := (body.get_child(0) as CollisionShape3D).shape as BoxShape3D
+			if bs.size.y >= 2.5 and minf(bs.size.x, bs.size.z) >= 1.5:
+				control = Features.blocked(world.get_world_3d(), (body as Node3D).global_position - Vector3(0, bs.size.y * 0.5 - 0.3, 0))
+				break
+	log_ev("Feature", "probe", {"map": map_id, "checked": results.size(), "failed": bad, "control_centre_blocked": control, "detail": results})
+
+
+## --reachprobe: every gameplay point must be reachable on the navmesh from both teams' spawns (walking, then
+## with ladders allowed), and the Core's own route (vault -> stabilizer) must exist without ladders.
+func _reach_probe() -> void:
+	var map_rid: RID = world.get_world_3d().navigation_map
+	var d := map_def
+	var targets: Array = []
+	for k in d.vaults:
+		targets.append(["vault%d" % k, d.vaults[k]])
+	for k in d.stabilizers:
+		targets.append(["stab%d" % k, d.stabilizers[k]])
+	for i in d.fields.size():
+		targets.append(["field%d" % i, d.fields[i]["position"]])
+	for i in d.shard_points.size():
+		targets.append(["shard%d" % i, d.shard_points[i]])
+	for i in d.beacon_points.size():
+		targets.append(["beacon%d" % i, d.beacon_points[i]])
+	for i in d.ffa_spawns.size():
+		targets.append(["ffa%d" % i, d.ffa_spawns[i]["position"]])
+	for role in ["attack", "defend"]:
+		for i in d.role_spawns[role].size():
+			targets.append(["spawn_%s%d" % [role, i], d.role_spawns[role][i]["position"]])
+	for i in d.ladders.size():
+		var lad: Dictionary = d.ladders[i]
+		targets.append(["ladder%d_top" % i, Vector3(lad["base"].x, lad["top_y"], lad["base"].z) - Vector3(lad["out"]) * 1.4])
+	for fe in d.features.get_children():
+		if fe is Features.PhaseGate:
+			targets.append(["gate_%s_in" % fe.gate_name, fe.global_position])
+			targets.append(["gate_%s_out" % fe.gate_name, fe.exit_pos])
+		elif fe is Features.Zipline:
+			targets.append(["zip_%s_a" % fe.zip_name, fe.a])
+			targets.append(["zip_%s_b" % fe.zip_name, fe.b])
+	var bad: Array = []
+	var total := 0
+	for role in ["attack", "defend"]:
+		var from: Vector3 = d.role_spawns[role][0]["position"]
+		for t in targets:
+			var to: Vector3 = t[1]
+			for layers in [3, 1]:
+				if layers == 1 and not (str(t[0]).begins_with("vault") or str(t[0]).begins_with("stab") or str(t[0]).begins_with("field") or str(t[0]).begins_with("spawn")):
+					continue
+				total += 1
+				var path := NavigationServer3D.map_get_path(map_rid, from, to, true, layers)
+				var end: Vector3 = path[path.size() - 1] if path.size() > 0 else from
+				var gap := Vector2(end.x - to.x, end.z - to.z).length()
+				if path.size() < 2 or gap > 2.5 or absf(end.y - to.y) > 3.2:
+					bad.append({"from": role, "to": t[0], "layers": layers, "gap": snappedf(gap, 0.1), "dy": snappedf(end.y - to.y, 0.1)})
+	# Core route without ladders, both directions
+	for pair in [[1, 2], [2, 1]]:
+		var vault: Vector3 = d.vaults.get(pair[0], Vector3.ZERO)
+		var stab: Vector3 = d.stabilizers.get(pair[1], Vector3.ZERO)
+		var path := NavigationServer3D.map_get_path(map_rid, vault, stab, true, 1)
+		total += 1
+		var end: Vector3 = path[path.size() - 1] if path.size() > 0 else vault
+		if path.size() < 2 or Vector2(end.x - stab.x, end.z - stab.z).length() > 2.5:
+			bad.append({"from": "vault%d" % pair[0], "to": "stab%d" % pair[1], "layers": 1, "gap": -1.0, "dy": 0.0})
+	var crowded: Array = []
+	var w3 := world.get_world_3d()
+	for role in ["attack", "defend"]:
+		for i in d.role_spawns[role].size():
+			if Features.blocked(w3, d.role_spawns[role][i]["position"]):
+				crowded.append("spawn_%s%d" % [role, i])
+	for i in d.ffa_spawns.size():
+		if Features.blocked(w3, d.ffa_spawns[i]["position"]):
+			crowded.append("ffa%d" % i)
+	for k in d.vaults:
+		if Features.blocked(w3, d.vaults[k]):
+			crowded.append("vault%d" % k)
+	for k in d.stabilizers:
+		if Features.blocked(w3, d.stabilizers[k]):
+			crowded.append("stab%d" % k)
+	log_ev("Reach", "probe", {"map": map_id, "checked": total, "unreachable": bad.size(), "blocked_spawns": crowded.size(), "blocked_list": crowded, "ladders": d.ladders.size(), "bad": bad})
 
 
 func _process(delta: float) -> void:
@@ -448,6 +743,13 @@ func _process(delta: float) -> void:
 		_shot_elapsed += delta
 		if args.has("open-map-at") and _shot_elapsed >= float(args["open-map-at"]):
 			map_open = true
+		if args.has("pause-at") and _shot_elapsed >= float(args["pause-at"]):
+			args.erase("pause-at")
+			set_paused(true)
+		if args.has("return-menu-at") and _shot_elapsed >= float(args["return-menu-at"]):
+			args.erase("return-menu-at")
+			log_ev("Debug", "return_to_menu", {})
+			return_to_menu("", false)
 		if not _shots.is_empty() and _shot_elapsed >= _shots[0]:
 			var at: float = _shots.pop_front()
 			_take_screenshot(at)
@@ -459,10 +761,12 @@ func _take_screenshot(at: float) -> void:
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()
 	var base := str(args.get("screenshot", "build/shots/shot"))
-	var path := "%s_%d_%02d.png" % [base, multiplayer.get_unique_id(), int(at)]
+	var stamp := "%02d" % int(at) if is_equal_approx(at, roundf(at)) else "%.2f" % at
+	var path := "%s_%d_%s.png" % [base, multiplayer.get_unique_id(), stamp]
 	var abs_path := ProjectSettings.globalize_path("res://" + path) if not path.begins_with("/") and path.find(":") < 0 else path
 	DirAccess.make_dir_recursive_absolute(abs_path.get_base_dir())
 	var err := img.save_png(abs_path)
+	shots_done += 1
 	log_ev("Shot", "saved", {"path": abs_path, "err": err})
 
 
@@ -590,6 +894,11 @@ func rpc_projectile_accel(id: int, factor: float) -> void:
 	projectiles.on_accel(id, factor)
 
 
+@rpc("authority", "call_local", "reliable")
+func rpc_shot_retrieve(owner_id: int, pts: PackedVector3Array, dur: float) -> void:
+	projectiles.on_retrieve(owner_id, pts, dur)
+
+
 @rpc("authority", "call_local", "unreliable_ordered")
 func rpc_projectile_hit(id: int, pos: Vector3, hit_id: int) -> void:
 	projectiles.on_hit(id, pos, hit_id)
@@ -604,20 +913,21 @@ func rpc_recoil(dyaw: float, dpitch: float) -> void:
 @rpc("authority", "call_local", "unreliable")
 func rpc_muzzle(shooter_id: int, weapon: String) -> void:
 	var p = players.get(shooter_id)
-	var cue_by := {"rifle": "shot", "shotgun": "shot_shotgun", "sniper": "shot_sniper", "mg": "shot_mg"}
+	var cue_by := {"rifle": "shot", "shotgun": "shot_shotgun", "sniper": "shot_sniper", "mg": "shot_mg", "deagle": "shot_sniper"}
 	var cue: String = cue_by.get(weapon, "shot")
+	var pitch_mul := 0.78 if weapon == "deagle" else 1.0   # Desert Eagle: the sniper crack dropped into a heavier boom
 	if p != null and is_instance_valid(p):
 		if p.is_local():
 			p.kick_view()
 			p.eject_shell()
 			if p.fp_arms != null:
 				p.fp_arms.play_shoot()
-			Sfx.play(cue, -5.0, randf_range(0.98, 1.02))
+			Sfx.play(cue, -5.0, randf_range(0.98, 1.02) * pitch_mul)
 		else:
 			var d: float = local_player.global_position.distance_to(p.global_position) if local_player != null and is_instance_valid(local_player) else 30.0
-			Sfx.play(cue, -10.0 - clampf(d / 6.0, 0.0, 18.0), randf_range(0.95, 1.05))
+			Sfx.play(cue, -10.0 - clampf(d / 6.0, 0.0, 18.0), randf_range(0.95, 1.05) * pitch_mul)
 		fx.emit("muzzle", shooter_id, p.muzzle_position())
-		if weapon == "rifle" or weapon == "mg" or weapon == "sniper":
+		if weapon == "rifle" or weapon == "mg" or weapon == "sniper" or weapon == "deagle":
 			var shell_pos: Vector3 = p.global_position + Vector3(0, 0.1, 0)
 			get_tree().create_timer(0.35).timeout.connect(func() -> void: Sfx.play_at("shell", shell_pos, -16.0 if p.is_local() else -12.0, 1.5))
 		if not p.is_local() and p.rig != null:
@@ -629,6 +939,68 @@ func rpc_prop_state(prop_id: int, state: String, version: int, t: float) -> void
 	var prop = props.get(prop_id)
 	if prop != null and is_instance_valid(prop):
 		prop.apply_state(state, version, t)
+
+
+# ---------------------------------------------------------------- armory (loadout selection)
+func _armory_rng() -> RandomNumberGenerator:
+	var r := RandomNumberGenerator.new()
+	r.randomize()
+	return r
+
+
+## Loadout for automatic answers (headless peers, autopilot, tests): --loadout=sniper,deagle or the default.
+func cli_loadout() -> Array:
+	if args.has("loadout"):
+		var l := str(args["loadout"]).split(",")
+		return Loadout.sanitize([l[0], l[1] if l.size() > 1 else ""])
+	return Loadout.DEFAULT.duplicate()
+
+
+## True when this peer answers the armory itself (no screen): headless runs and scripted autopilot players.
+func armory_auto() -> bool:
+	if args.has("armory-selftest"):
+		return false   # the self-test drives the phase itself
+	return DisplayServer.get_name() == "headless" or (autopilot != null and not args.has("armory-ui"))
+
+
+## Local player's answer. The server applies it directly; clients send it (the server validates every pick).
+func submit_loadout(picks: Array) -> void:
+	if multiplayer.is_server():
+		if armory != null:
+			armory.on_submit(multiplayer.get_unique_id(), picks)
+	else:
+		rpc_armory_submit.rpc_id(1, picks)
+
+
+func send_armory_ack(pid: int, picks: Array, accepted: bool, reason: String) -> void:
+	if pid == multiplayer.get_unique_id():
+		armory_ack.emit(picks, accepted, reason)
+	elif pid > 1:
+		rpc_armory_ack.rpc_id(pid, picks, accepted, reason)
+
+
+@rpc("authority", "call_local", "reliable")
+func rpc_armory_open(seconds: float, initial: bool) -> void:
+	if armory_auto():
+		submit_loadout(cli_loadout())
+		return
+	armory_requested.emit(seconds, initial)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func rpc_armory_submit(picks: Array) -> void:
+	if multiplayer.is_server() and armory != null:
+		armory.on_submit(multiplayer.get_remote_sender_id(), picks)
+
+
+@rpc("authority", "call_remote", "reliable")
+func rpc_armory_ack(picks: Array, accepted: bool, reason: String) -> void:
+	armory_ack.emit(picks, accepted, reason)
+
+
+@rpc("authority", "call_local", "reliable")
+func rpc_armory_close() -> void:
+	armory_closed.emit()
 
 
 @rpc("authority", "call_local", "reliable")

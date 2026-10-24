@@ -382,7 +382,7 @@ func _update_hotreturn(delta: float) -> void:
 		"dropped":
 			core_mesh.visible = true
 			core_mesh.global_position = Vector3(core.get("pos", Vector3.ZERO)) + Vector3(0, 1.0 + sin(_bob * 2.0) * 0.15, 0)
-			core_label.text = "DROPPED / %d%% TICKING" % int(v)
+			core_label.text = "DROPPED / %d%% PAUSED" % int(v)
 		"locked":
 			core_mesh.visible = true
 			core_mesh.global_position = Vector3(core.get("pos", Vector3.ZERO)) + Vector3(0, 1.0, 0)

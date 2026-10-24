@@ -5,9 +5,8 @@ extends RefCounted
 ## Round result priority, resolved once on the server:
 ##   1. detonation already resolved      -> defenders
 ##   2. stabilized at the home Stabilizer -> attackers
-##   3. eliminations: both squads dead -> defenders (no extraction); defenders dead -> attackers;
-##                    attackers dead  -> defenders
-##   4. round timer at zero              -> defenders
+##   3. round timer at zero              -> defenders
+## Eliminations never decide a round: dead players respawn after RESPAWN_DELAY with spawn protection.
 ## Match structure (side swap after 2 regulation rounds, first to 3, 2-2 overtime pairs) is shared with
 ## CorebreakRules.new_match / record_round / attacking_team.
 
@@ -33,21 +32,13 @@ static func resolve(s: Dictionary) -> String:
 		return "defend:detonation"
 	if bool(s.get("stabilized", false)):
 		return "attack:stabilized"
-	var attackers := int(s.get("attackers_alive", 0))
-	var defenders := int(s.get("defenders_alive", 0))
-	if attackers == 0 and defenders == 0:
-		return "defend:eliminated"
-	if defenders == 0:
-		return "attack:eliminated"
-	if attackers == 0:
-		return "defend:eliminated"
 	if float(s.get("time_left", 1.0)) <= 0.0:
 		return "defend:timer"
 	return ""
 
 
 ## Advances volatility for one tick. Returns {"v": new value, "used": field allowance consumed}.
-## ticking: Core is carried or normally dropped (not in cradle, not temporally locked).
+## ticking: Core is being carried (a dropped, cradled or temporally locked Core is paused).
 ## allowance: remaining pause seconds of the field the Core is inside (0 when not in a field).
 ## ff: a Fast-Forward field covers the Core (only applies outside a Stability Field).
 static func volatility_step(v: float, delta: float, ticking: bool, in_field: bool, allowance: float, ff: bool) -> Dictionary:
@@ -83,8 +74,8 @@ static func history_value(history: Array, t: float) -> float:
 	return float(last[1])
 
 
-static func new_match() -> Dictionary:
-	return CorebreakRules.new_match()
+static func new_match(policy := "every_round") -> Dictionary:
+	return CorebreakRules.new_match(policy)
 
 
 static func attacking_team(m: Dictionary) -> int:

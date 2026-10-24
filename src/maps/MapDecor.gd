@@ -45,8 +45,8 @@ static func dress_boxes(def: MapDef) -> int:
 		for c in body.get_children():
 			if c is MeshInstance3D and (c as MeshInstance3D).mesh is BoxMesh:
 				mi = c
-		if mi == null:
-			continue
+		if mi == null or not mi.visible:
+			continue   # an invisible body (the barrier above a sea rail) must not grow floating trims
 		var sz: Vector3 = (mi.mesh as BoxMesh).size
 		if sz.y < 0.7 or sz.y > 7.0 or sz.x > 60.0 or sz.z > 60.0:
 			continue

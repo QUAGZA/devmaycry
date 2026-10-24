@@ -46,6 +46,11 @@ uniform float emissive_energy = 0.0;
 
 varying vec3 wpos;
 varying vec3 wnrm;
+// Lighting normal (view space) carrying the painted detail. It is deliberately NOT written to NORMAL:
+// the geometric normal must reach the normal-roughness buffer untouched, because SSAO and the depth
+// prepass read it. Writing the perturbed normal there produced back-facing normals that SSAO turned
+// into black stippling (worst with MSAA). Diagnosed with src/style/Diag.gd, see the build status.
+varying vec3 lit_n;
 
 float hash3(vec3 p) {
 	return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
@@ -99,17 +104,22 @@ void fragment() {
 		vec3 wz = vec3(tz.x * s.z, tz.y, 0.0);
 		vec3 wn = normalize(wnrm + (wx * bw.x + wy * bw.y + wz * bw.z) * normal_strength * near_q);
 		nrm_out = normalize((VIEW_MATRIX * vec4(wn, 0.0)).xyz);
+		// never let the detail tilt the lighting normal away from the viewer
+		float facing = dot(nrm_out, VIEW);
+		if (facing < 0.05) {
+			nrm_out = normalize(mix(NORMAL, nrm_out, 0.35));
+		}
 	}
 	// edge wear: brighten convex-looking high-frequency spots, mostly near the top of vertical faces
 	float n3 = vnoise(wpos * tile * 12.0 + 41.0);
 	col = mix(col, col * 1.08 + vec3(0.02), smoothstep(0.72, 0.9, n3) * wear * near_q);
-	NORMAL = nrm_out;
+	lit_n = nrm_out;
 	ALBEDO = col;
 	ROUGHNESS = clamp(roughness - n2 * 0.15 * wear, 0.05, 1.0);
 	METALLIC = metallic;
 	EMISSION = emissive.rgb * emissive_energy;
 	// rim: view-facing falloff, kept subtle on architecture, stronger on characters and hero props
-	float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
+	float fres = pow(1.0 - clamp(dot(nrm_out, VIEW), 0.0, 1.0), 3.0);
 	EMISSION += rim_color.rgb * fres * rim_strength * 0.35;
 	// cool ramp in shadow comes through ambient: tint ambient toward the shade colour
 	AO = 1.0;
@@ -117,7 +127,8 @@ void fragment() {
 }
 
 void light() {
-	float ndl = clamp(dot(NORMAL, LIGHT), 0.0, 1.0) * ATTENUATION;
+	vec3 N = normalize(lit_n);
+	float ndl = clamp(dot(N, LIGHT), 0.0, 1.0) * ATTENUATION;
 	float stepped = floor(ndl * bands + 0.5) / bands;
 	// soften the band boundary a touch so steps read as painted, not aliased
 	float lo = floor(ndl * bands) / bands;
@@ -136,7 +147,7 @@ void light() {
 	DIFFUSE_LIGHT += warm + cool + LIGHT_COLOR * dots;
 	if (spec_step > 0.0) {
 		vec3 h = normalize(LIGHT + VIEW);
-		float sp = pow(clamp(dot(NORMAL, h), 0.0, 1.0), mix(8.0, 96.0, 1.0 - ROUGHNESS));
+		float sp = pow(clamp(dot(N, h), 0.0, 1.0), mix(8.0, 96.0, 1.0 - ROUGHNESS));
 		SPECULAR_LIGHT += LIGHT_COLOR * step(0.55, sp) * spec_step * ATTENUATION;
 	}
 }

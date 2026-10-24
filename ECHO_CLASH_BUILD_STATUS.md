@@ -3,6 +3,59 @@
 Engine: **Godot 4.7.2.stable.official**, standard build. Project `D:\devmaycry`. Packaged `build/EchoClash.exe`.
 Every "tested" claim points to a log or screenshot under `build/` produced by the commands in `ECHO_CLASH_SETUP.md`.
 
+## Map redesign, front end and traversal hardening (2026-10-24, branch `final-upgrade`)
+
+| Area | Result | Evidence |
+|---|---|---|
+| Three maps rebuilt in place | Oracle Gardens, Tideline Exchange, Vector Foundry are now authored street networks (`tools/mapproto/*.py` -> `src/maps/plans/*_plan.gd` -> `PlanRunner`), not scattered cover in an open arena. Walkable ground is 27-33 % of each outline; the rest is buildings, rooms, walls and stacks. The old open plaza stays as the Developer Test Arena (marked TEST MAP, still open on purpose); legacy Tideline/Foundry remain CLI-only. | `build/maps/*_plan.png`, `build/shots/vis_*.png` |
+| Distinct identities | Oracle: irregular sanctuary streets, octagonal court, roofed temples, terraces joined by S-bend arcades, sunken basin, home-side phase gates. Tideline: 14 m exchange hall with galleries and crossing cables, gantry quay with ladders and cable, warehouse passage, sunken channel with weirs and both fields. Foundry: roofed reactor with offset doors inside a walled ring street, watchtower with elevated walkways, launch pads, roofed service tunnel with bulkheads, home-side portals. | `build/shots/vis_*`, `tools/mapproto/*.py` headers |
+| Carry routes (engine navmesh) | Direct always detonates; only the both-field route survives. Oracle 126.8 / 145.1 m, Tideline 122.4 / 140.3 m, Foundry 121.9 / 145.1 m (arrival volatility 79 / 75 / 79 %). Single-field routes (27.5 / 26.4 / 27.5 s exposure) still detonate. | `check_*_routeprobe.log` |
+| Sightlines (engine rays, ground level, 800+ navmesh points x 48 rays at eye height) | share of rays beyond 25 m: 2.6-3.3 %; beyond 35 m: 0.5-0.6 %; per-point longest ray p50 27-28 m, p90 39-41 m, p99 50-56 m; no unobstructed 80 m ground ray on any of the three maps. Elevated levels see further by nature (galleries, gantry, walkway). | `check_*_sightprobe.log` |
+| Reachability | Every gameplay point, ladder top, gate and cable anchor reachable from both teams' spawns (134-154 queries per map, 0 unreachable); the Core route needs no ladder. | `check_*_reachprobe.log` |
+| Perimeter | 1650 rays per map fired outward at four heights through every stretch of the outline: 0 gaps (walls, rails and an invisible barrier above the sea rails). Thin unintended slits between terraces/streets and building masses are filled by the plan tool (`fill_slivers`). | `check_*_perimeterprobe.log` |
+| Ziplines | Cable path swept with the player capsule at map load (an obstructed cable is disabled, not ridden); rider is blended onto the cable, swept every tick (stops and drops at the last free point if something solid appears) and set down on a verified standing spot; a tap of E is buffered, anchor volume is larger, a prompt shows "HOLD E / RIDE THE ZIPLINE". All 4 Tideline cables clear; a rider rode HALL A four times in a row, each landing clear. The two obstructed legacy_tideline cables are detected and disabled by the guard. | `check_*_featureprobe.log`, `zip_ride.log` |
+| Phase gates | Exit is validated with the capsule and nudged to a clear standing spot or the teleport is cancelled with a notice; entry and exit areas probed; the Core carrier is refused with a prompt. Six consecutive teleports (3 round trips both ways) on the Oracle pair, exits clear, input recovered. | `gate_pingpong.log` |
+| Core carriers | Gates, ziplines and launch pads refuse the Core (ladders already did) so the measured carry routes cannot be shortcut; refusals verified in a run. | `gate_oracle2.log` |
+| Ladders | Foot exit fixed (a player leaving the foot is no longer held by the ladder volume); bots path over ladder links (navigation layer 2) unless carrying. Oracle ladder climbed and descended by the autopilot; Tideline hall ladders used repeatedly. | `ladder_oracle2.log`, `zip_ride.log` |
+| Reverse Entropy retrieval | On all three new maps: a missed shot is retrieved, replayed from the muzzle, hits an exposed defender exactly once and is stopped by a wall when the defender stands behind one (6 scenarios). | `retr_*_host.log`, `retrieve_final.txt` |
+| Black artifact | 0 isolated near-black pixels in 15 eye-level captures across the three maps (detector verified: 379 of 400 injected specks found). | `tools/speck_check.py` |
+| Startup sequence | New dark real-time intro (fade in, converging teal motes, geometric traces, Core materialises, energy arcs, light sweep, tagline, title, menu) 6.7 s on the first launch, 1.3 s afterwards, skippable by any key or click, never replayed after a match. | `intro_full.log`, `intro_fast.log`, `intro_skip.log`, `build/shots/menu_*` |
+| Main menu | Dark presentation scene (small real-time 3D Core, lattice, rings, motes; no map, no video) with the six original entries, hover/focus/press animation and keyboard navigation. | `menu_main_1_00.png` |
+| Match setup | Sectioned form (player / match / bots / rules), selected-map card with preview, name, mechanic and description, team size and player count enabled by mode, same options and same lobby flow. | `menu_setup_1_00.png` |
+| Settings / pause | Same options and persistence, restyled; value read-outs on sliders; Esc/Back handled per screen; pause panel uses the same look. | `menu_settings_1_00.png`, `hud_pause_1_10.png` |
+| Music | `theplan.wav` plays from the start of the intro, continues through menus, fades out when a match loads, resumes from where it stopped when the player returns; one player only; follows the Master and Music sliders. | `music_flow.log`, `tests/music_test.gd` |
+| Performance (windowed 1920x1080, High, FXAA, 6 players) | While the window had focus: Oracle 239-333 FPS, Tideline 237-325, Foundry 291-324. Windows throttles an unfocused window to exactly 30 FPS (the log records `focused:false` at every 30 FPS sample), so sustained numbers need the window to stay in the foreground. | `perf_*.log`, `perf6.log` |
+| Unit / LAN / soak | 78/78 unit checks, 11 music checks, LAN smoke test (host + 2 clients + bots) passes on Tideline and Oracle with the new front end; 130 s bot soaks: no script errors, no bot stuck recoveries on any map. | `unit2.log`, `net_*.log`, `bot_soak.txt` |
+
+### Known gaps after the map redesign
+- The skip key press itself (as opposed to the skip logic) and every visual judgment (look, feel, readability of the new maps) were not exercised by a human; the intro was verified by logs and captured frames.
+- Two machines were not available: LAN was verified with separate instances on one PC.
+- Medium bots rarely complete a carry on Foundry (two bay doors guard a 16 m straight spoke); no stuck or script problems, but their objective play is not tuned.
+- `legacy_tideline` still ships two obstructed cables (disabled at load by the guard); the legacy maps and the Developer Test Arena (open plaza, 56 % of rays beyond 25 m) are test content and are not part of the redesign.
+- The 30 FPS plateau seen when the window is not focused is Windows behaviour, not a game cap.
+
+## Final upgrade (2026-10-24, branch `final-upgrade`, checkpoint tag `pre-final-upgrade`)
+
+| Area | Result | Evidence |
+|---|---|---|
+| Black stippling (root cause) | Fixed. Isolation harness (`--diag=...`) showed the artifact appears only with SSAO under MSAA (14.3 % near-black pixels vs 0.07 %); swapping in standard materials removed it; shader bisection pinned it to `palimpsest_toon` writing a perturbed triplanar detail normal into NORMAL, i.e. into the normal buffer SSAO reads (back-facing normals -> full occlusion). Detail now feeds lighting through a varying; the buffer keeps the geometric normal. MSAA + SSAO + outline: 0.37 %. | `build/shots/diag/compare_grid.png`, `before_after_msaa.png`, `diag_*.log` |
+| Graphics apply order | Effects toggles (SSAO/glow/fog) were applied before the match world existed; now re-applied after scene ready. | `Match.gd` |
+| Bot tower loop | Reproduced (old code: 52 stuck jumps in 80 s, 51 within 14 m of the tower). Root cause: unprojected goals inside colliders + arrival measured to the unreachable point + jump every 1.4 s. Fixed: goals snapped to the navmesh, arrival at the reachable path end, staged recovery (replan, sidestep, one jump, abandon + blacklist). New code: 0 stuck jumps on all maps. | `botcmp_old_*.log`, `botcmp_new_*.log`, `botnew2_*.log` |
+| Three new maps | Oracle Gardens (`OracleSanctuary.gd`), Tideline Exchange (`TidelineHall.gd`), Vector Foundry (`FoundryLoop.gd`), built with `MapKit` (walls, concave slabs, floors with sunken holes, stairs, roofed rooms, ladders). Original Oracle plaza kept as **Developer Test Arena**; old Tideline/Foundry kept as `legacy_*` (CLI only). | `oA_grid.png`, `tB_grid.png`, `fC_grid.png`, `fullmaps.png`, `route_*` |
+| Ladders | New feature: server-authoritative climbing, navigation links for bots, minimap icon. | `tB.log`, `fC.log` |
+| Shot retrieval | Reverse Entropy retrieves the owner's latest missed shot (<= 8 s, rifle/sniper/mg), shows a mote + thin tether returning to the muzzle, replays it once from the muzzle along the recorded direction with normal collision. Host + client test: replay hit the defender once (24 dmg). | `retrieve_host.log`, `retrieve3_zoom.png` |
+| Temporal props | Intact / damaged / destroyed / restored / expired; never restores collision inside a living player. | `prop_safety*_host.log` |
+| Role switching | Every round by default, halves optional (lobby option, `--switch_policy`), tests for both. | `roles.log`, `lan_full_host.log`, `tests/run_tests.gd` |
+| Menu / settings | Centred bordered menu panel over the live map; map selector lists the three maps + the test arena (marked); two-column settings. | `menu_v4_1_00.png`, `settings_v5_1_00.png` |
+| LAN | Second instance joined by room code over the LAN beacon and stayed connected for a full 4-round match. | `lan_full_*.log` |
+| Performance (packaged exe) | 1080p, High, 8 players: Oracle 206-224 FPS, Tideline 224-237, Foundry 249-269. Intermittent 30 FPS samples seen only while the Godot editor was open and reimporting changed files. | `exeperf_*.log` |
+
+### Known gaps after the final upgrade
+- Bots navigate all maps but are not tuned for objective play against full defending teams; in 4v4 tests attackers rarely reach the Core on Oracle/Foundry (they did on Tideline: 7 pickups, 2 detonations) and carriers do not yet path through Stability Fields reliably.
+- Two physical machines and human playtesting were not available; LAN was verified with two instances on one PC.
+- Map art on the three new layouts is the shared toolkit look (toon materials, columns, trims); less bespoke dressing than the earlier plaza art pass.
+- The first-person weapon follows the hand bone without IK; ADS is an offset.
+
 ## Visual production pass (2026-10-24, after the Hot Return rebuild)
 
 | Area | What changed | Evidence |
@@ -53,7 +106,8 @@ Oracle Gardens 217-239 FPS, Tideline Exchange 214-279 FPS, Vector Foundry 215-25
 | Settings | Resolution list + native, fullscreen, preset, frame cap, VSync, sensitivity, FOV, invert Y, reticle, shake, head bob, six audio buses, Apply / Revert / Reset, persisted in `user://settings.cfg` |
 | LAN | ENet listen server, room code via UDP beacon, join by code or IP, refusal when locked/full, host-leave handling, exported exe verified as host and client |
 | Bots | Easy/Medium/Hard: LOS perception, reaction, aim error, cadence; Hot Return behaviours (fetch/escort/carry, field detour when projected volatility is too high, Reverse Entropy when hurt while carrying, vault guard, chase, Fast-Forward near a ticking Core); Relic behaviours |
-| Relic Rush | Kept: shards, rotating beacon, respawns, first to 25, sudden death, Reverse Entropy once per match, all weapons |
+| Team respawns | Players no longer stay dead for the round: `MatchServer` queues one respawn per death (3.0 s, keyed by player id, cancelled at round start and on disconnect), picks a valid spawn of the player's own team (Cobalt west / Vermilion east in Hot Return, FFA points in Relic Rush; farthest from living enemies, points inside geometry or on a living player are skipped), restores 100 HP and weapons, then grants exactly 3.0 s of invulnerability (`Player.RESPAWN_PROTECT`). While protected: no damage taken, no firing, no projectile damage, no abilities, no Core pickup / field or Stabilizer progress / Relic shard or beacon progress; movement and look stay free. Teal shield for other players, HUD countdown `INVULNERABLE - Ns`, dead HUD `RESPAWNING IN N`. Rounds no longer end because a squad is wiped out (timer, detonation and stabilization still end them); the round timer, Core volatility and scores are untouched by respawns. Bots use the same path (`BotBrain.on_respawn` clears stale routes) |
+| Relic Rush | Kept: shards, rotating beacon, respawns, first to 25, sudden death, Reverse Entropy once per match, the same free two-slot armory loadout as every mode (any two of Desert Eagle / Rifle / Shotgun / Sniper) |
 | Audio | 28 procedural cues on Master/Music/Weapons/Effects/Ambience/UI buses: per-weapon shots, rewind, fast-forward, Core pickup/drop/detonation/stabilization, field enter/exit, warnings, restoration, portal/zipline/pad, UI |
 
 ## Partially implemented
