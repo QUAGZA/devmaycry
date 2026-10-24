@@ -396,6 +396,9 @@ func _physics_process(delta: float) -> void:
 	if args.has("sightprobe") and not _probed and server_tick > 60 and map_def != null:
 		_probed = true
 		_sight_probe()
+	if args.has("respawn-selftest") and not _probed and match_server != null and match_server.phase == "live" and map_def != null:
+		_probed = true
+		_respawn_selftest()
 	if args.has("featureprobe") and not _probed and server_tick > 60 and map_def != null:
 		_probed = true
 		_feature_probe()
@@ -521,6 +524,66 @@ func _sight_probe() -> void:
 		out[b] = {"points": arr.size(), "p50": snappedf(arr[arr.size() / 2], 0.1), "p90": snappedf(arr[int(arr.size() * 0.9)], 0.1), "p99": snappedf(arr[int(arr.size() * 0.99)], 0.1),
 			"rays_over_25_pct": snappedf(100.0 * rays[b][1] / maxf(1.0, rays[b][0]), 0.1), "rays_over_35_pct": snappedf(100.0 * rays[b][2] / maxf(1.0, rays[b][0]), 0.1)}
 	log_ev("Sight", "probe", {"map": map_id, "levels": out, "unobstructed_ground_points": long_pts})
+
+
+## --respawn-selftest: kills one human and one bot per team through the real damage path, then checks the respawn
+## (own team's spawn list, full health, exactly RESPAWN_PROTECT seconds of protection with no damage taken and no
+## weapon use, normal movement) and the end of protection (damage and fire work again).
+func _respawn_selftest() -> void:
+	var fails := [0]
+	var rep := func(name: String, ok: bool, extra: String = "") -> void:
+		if not ok:
+			fails[0] += 1
+		log_ev("SelfTest", "pass" if ok else "FAIL", {"check": name, "detail": extra})
+	var victims: Array = []
+	for team in [1, 2]:
+		var human: Player = null
+		var bot: Player = null
+		for q: Player in players.values():
+			if is_instance_valid(q) and q.team == team:
+				if q.is_bot and bot == null:
+					bot = q
+				elif not q.is_bot and human == null:
+					human = q
+		for v in [human, bot]:
+			if v != null:
+				victims.append(v)
+	for v: Player in victims:
+		var kind := "bot" if v.is_bot else "human"
+		var tag := "team%d %s" % [v.team, kind]
+		var side := "attack" if v.team == 1 else "defend"
+		v.apply_damage(999.0, -99, "selftest", 0.0)
+		rep.call(tag + ": dies at zero health", not v.alive)
+		rep.call(tag + ": cannot fire while dead", not v.can_deal_damage())
+		await get_tree().create_timer(MatchServer.RESPAWN_DELAY + 0.35).timeout
+		rep.call(tag + ": respawned after the delay with full health", v.alive and is_equal_approx(v.hp, Player.MAX_HP), "hp %s" % v.hp)
+		var near := 1e9
+		for sp in map_def.role_spawns[side]:
+			near = minf(near, (sp["position"] as Vector3).distance_to(v.global_position))
+		rep.call(tag + ": stands on one of its own team's spawn points", near < 2.0, "%.2f m" % near)
+		rep.call(tag + ": spawn is clear of geometry", not Features.blocked(world.get_world_3d(), v.global_position))
+		var hp0 := v.hp
+		var took := v.apply_damage(60.0, -99, "selftest", 0.0)
+		rep.call(tag + ": protected, damage refused", (not took) and is_equal_approx(v.hp, hp0) and v.is_protected(), "protect_t %.2f" % v.spawn_protect_t)
+		rep.call(tag + ": protected player cannot deal damage", not v.can_deal_damage() and projectiles.fire(v.id, "rifle", v.eye_position(), Vector3.FORWARD * 100.0, 24.0, v.get_rid()) == 0)
+		rep.call(tag + ": protected player cannot progress objectives", not v.can_progress_objective())
+		var p0 := v.global_position
+		if not v.is_bot:
+			v.inp_move = Vector2(0, -1)
+		await get_tree().create_timer(1.2).timeout
+		if not v.is_bot:
+			rep.call(tag + ": can move while protected", Vector2(v.global_position.x - p0.x, v.global_position.z - p0.z).length() > 1.0 or v.velocity.length() > 0.5, "moved %.1f m" % p0.distance_to(v.global_position))
+		# protection must still be running just before 3 s and gone just after
+		await get_tree().create_timer(2.7 - 0.35 - 1.2).timeout
+		rep.call(tag + ": still protected just before 3 s", v.is_protected(), "protect_t %.2f" % v.spawn_protect_t)
+		await get_tree().create_timer(0.6).timeout   # about 3.3 s after the respawn
+		rep.call(tag + ": protection ended after 3 s", not v.is_protected(), "protect_t %.2f" % v.spawn_protect_t)
+		var hp1 := v.hp
+		var took2 := v.apply_damage(10.0, -99, "selftest", 0.0)
+		rep.call(tag + ": takes damage normally afterwards", took2 and v.hp < hp1)
+		rep.call(tag + ": can deal damage again", v.can_deal_damage() and projectiles.fire(v.id, "rifle", v.eye_position(), Vector3.FORWARD * 100.0, 24.0, v.get_rid()) > 0)
+		v.hp = Player.MAX_HP
+	log_ev("SelfTest", "done", {"map": map_id, "mode": mode_id, "victims": victims.size(), "failures": fails[0]})
 
 
 ## --featureprobe: sweep every zipline with the player capsule, check both anchors and every gate's exit for room.

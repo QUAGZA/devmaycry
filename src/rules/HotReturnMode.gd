@@ -44,7 +44,7 @@ func role_of(team: int) -> String:
 
 
 func spawn_protection() -> float:
-	return 0.0
+	return Player.RESPAWN_PROTECT
 
 
 func side_of(team: int) -> String:
@@ -153,7 +153,7 @@ func _step_core(delta: float) -> void:
 			pass
 		else:
 			for p: Player in Game.players.values():
-				if not is_instance_valid(p) or not p.alive or p.frozen or p.rewind_t > 0.0:
+				if not is_instance_valid(p) or not p.can_progress_objective() or p.rewind_t > 0.0:
 					continue
 				if role_of(p.team) != "attack":
 					continue
@@ -333,7 +333,7 @@ func _alive_counts() -> Dictionary:
 func _check_result() -> void:
 	if phase != "live":
 		return
-	var ac := _alive_counts()
+	var ac := {"attack": 1, "defend": 1}   # respawns: a squad wiped out for a moment does not end the round
 	var r := HotReturnRules.resolve({
 		"detonated": bool(core["detonated"]),
 		"stabilized": bool(core["stabilized"]),
@@ -406,6 +406,8 @@ func on_player_died(victim: Player, _killer_id: int, _cause: String) -> void:
 	if int(core["carrier"]) == victim.id and str(core["mode"]) == "carried":
 		_drop_core(victim, false)
 	victim.rewind_t = 0.0
+	if phase == "live":
+		ms.queue_respawn(victim.id, MatchServer.RESPAWN_DELAY)
 	_check_result()
 
 

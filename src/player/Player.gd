@@ -36,6 +36,8 @@ const WEAPON_RANGE := 120.0
 const STAND_HEIGHT := 1.6
 const STEP_HEIGHT := 0.55
 const CROUCH_HEIGHT := 1.05
+## Seconds of protection after a respawn: the single source for every mode and every check below.
+const RESPAWN_PROTECT := 3.0
 const MASK_SHOT := 1 | 2 | 4 | 32
 const TEMPORAL_LAYER := 32
 const F_ALIVE := 1
@@ -110,6 +112,7 @@ var switch_t := 0.0
 var viewmodels: Dictionary = {}
 var _fov_target := 86.0
 var brain = null
+var shield: MeshInstance3D          # translucent teal respawn shield, other players' view only
 var _local := false
 var _net_pos := Vector3.ZERO
 var _net_prev := Vector3.ZERO
@@ -167,6 +170,23 @@ func _init() -> void:
 	body_mesh.material_override = body_mat
 	body_mesh.visible = false
 	add_child(body_mesh)
+	shield = MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 1.05
+	sm.height = 2.3
+	sm.radial_segments = 28
+	sm.rings = 14
+	shield.mesh = sm
+	var shm := ShaderMaterial.new()
+	shm.shader = load("res://src/shaders/fx_bubble.gdshader")
+	shm.set_shader_parameter("tint", Color("48E0C1"))
+	shm.set_shader_parameter("fade", 0.55)
+	shm.set_shader_parameter("body", 0.04)
+	shield.material_override = shm
+	shield.position = Vector3(0, 0.95, 0)
+	shield.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	shield.visible = false
+	add_child(shield)
 	rig = TacticalRig.new()
 	rig.name = "Rig"
 	add_child(rig)
@@ -684,7 +704,7 @@ func _weapon_logic(pressed: int, staggered: bool) -> void:
 		_start_reload()
 		return
 	var want_fire := (inp_buttons & BTN_FIRE) != 0 if bool(w["auto"]) else (pressed & BTN_FIRE) != 0
-	if want_fire and fire_cd <= 0.0 and not staggered:
+	if want_fire and fire_cd <= 0.0 and not staggered and can_deal_damage():
 		if ammo > 0:
 			_shoot()
 		else:
@@ -706,7 +726,6 @@ func _shoot() -> void:
 	var w := Weapons.get_data(weapon_id)
 	ammo -= 1
 	fire_cd = float(w["rof"])
-	spawn_protect_t = 0.0
 	var moving := Vector3(velocity.x, 0.0, velocity.z).length() > 1.0
 	var sp := Weapons.spread(weapon_id, spray, moving, not is_on_floor(), crouching, ads)
 	var kick := Weapons.recoil(weapon_id, int(spray))
@@ -733,8 +752,21 @@ func trace_shot(from: Vector3, to: Vector3) -> Dictionary:
 
 
 ## Returns true if damage was applied. min_hp stops Echo damage from killing.
+## Central protection rules (respawn shield). Every damage, weapon and objective path asks these.
+func is_protected() -> bool:
+	return alive and spawn_protect_t > 0.0
+
+
+func can_deal_damage() -> bool:
+	return alive and not is_protected()
+
+
+func can_progress_objective() -> bool:
+	return alive and not frozen and not is_protected()
+
+
 func apply_damage(amount: float, from_id: int, cause: String, min_hp: float) -> bool:
-	if not alive or spawn_protect_t > 0.0 or frozen:
+	if not alive or is_protected() or frozen:
 		return false
 	if Game.match_server != null and not Game.match_server.can_damage(from_id, self):
 		return false
@@ -767,7 +799,9 @@ func _die(killer_id: int, cause: String) -> void:
 	zip_t = 0.0
 	launch_t = 0.0
 	rewind_t = 0.0
+	spawn_protect_t = 0.0
 	recorder.clear()
+	Game.rpc_fx.rpc("death", id, global_position)
 	if Game.match_server != null:
 		Game.match_server.on_player_died(self, killer_id, cause)
 
@@ -798,6 +832,8 @@ func respawn(pos: Vector3, yaw_: float, protect: float) -> void:
 	head.rotation.x = 0.0
 	last_attacker = 0
 	recorder.clear()
+	if brain != null and brain.has_method("on_respawn"):
+		brain.on_respawn()
 	_net_pos = pos
 	_net_prev = pos
 	_apply_flags_visual()
@@ -921,6 +957,9 @@ func _process(delta: float) -> void:
 
 ## Death clip, revive, reload and weapon visuals for the third-person rig (server and clients alike).
 func _update_life_visuals(delta: float) -> void:
+	if not multiplayer.is_server() and spawn_protect_t > 0.0:
+		spawn_protect_t = maxf(0.0, spawn_protect_t - delta)   # smooth countdown between snapshots
+	shield.visible = is_protected() and not _local and not _spectated
 	if alive != _was_alive:
 		_was_alive = alive
 		if not alive:

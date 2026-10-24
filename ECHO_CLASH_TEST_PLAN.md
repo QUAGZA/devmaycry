@@ -39,6 +39,14 @@ PASS = run and observed in a log or screenshot under `build/`. NOT RUN = needs a
 | W8 | Black-speckle detector over 15 captures: 0 isolated dark pixels (control: 379 of 400 injected found) | `tools/speck_check.py` |
 | W9 | Performance 1920x1080: 239-333 FPS (Oracle), 237-325 (Tideline), 291-324 (Foundry) while focused; 30 FPS when Windows deprioritises an unfocused window | `perf_*.log`, `perf6.log` |
 
+## Team respawns with invulnerability (actually run, 2026-10-24)
+
+- `--respawn-selftest` (Game.gd, real damage path, 37 checks per map, 0 failures on Oracle Gardens, Tideline Exchange and Vector Foundry; one human-slot player on Cobalt and bots on both teams): dies, cannot fire while dead, respawns with 100 HP within 2 m of a spawn of its own team and not inside geometry, damage refused while protected, `ProjectileManager.fire` returns 0 while protected, no objective progress while protected, can move, still protected at 2.7 s, protection ended by 3.3 s, takes and deals damage afterwards. Logs: `build/logs/respawn_selftest_<map>.log`.
+- Bot soak 150 s per map (`tools/bot_soak.ps1`): 0 script errors, 0 stuck recoveries, 0 rounds ended by elimination, respawns 8/11/17 for 8/13/17 kills (the difference is respawns still pending when a round ended). `build/logs/bot_soak_respawn.txt`.
+- Relic Rush headless run: 9 respawns, each with protect 3.0 at an FFA spawn. `build/logs/relic_respawn.log`.
+- Unit tests 78/78. Windowed 1600x900 capture confirmed the HUD ("RESPAWNING IN 2" while dead, "INVULNERABLE - 2S" after).
+- NOT run: a second machine / LAN client respawning, a human on Vermilion, the shield mesh as seen by another human player, hands-on feel of the 3 s window.
+
 ## Manual checklist (NOT RUN by the agent)
 
 0. Visual pass: walk each map and look for floating or clipping props; visit the alcoves, piers and lobes; look down

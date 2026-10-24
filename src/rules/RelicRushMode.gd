@@ -11,7 +11,7 @@ const BEACON_RADIUS := 5.5
 const BEACON_TICK := 4.0
 const BEACON_ROTATE := 45.0
 const RESPAWN_DELAY := 3.0
-const PROTECT := 2.0
+const PROTECT := Player.RESPAWN_PROTECT
 
 var ms: MatchServer
 var s: Dictionary
@@ -135,7 +135,7 @@ func _step_shards(delta: float) -> void:
 			continue
 		var pos: Vector3 = sh["pos"]
 		for p in Game.players.values():
-			if not is_instance_valid(p) or not p.alive or p.frozen:
+			if not is_instance_valid(p) or not p.can_progress_objective():
 				continue
 			if Vector2(p.global_position.x - pos.x, p.global_position.z - pos.z).length() <= SHARD_RADIUS and absf(p.global_position.y - pos.y) < 3.0:
 				sh["active"] = false
@@ -151,7 +151,7 @@ func _step_beacon(delta: float) -> void:
 	var bp := beacon_pos()
 	var occupants := {}
 	for p in Game.players.values():
-		if not is_instance_valid(p) or not p.alive or p.frozen:
+		if not is_instance_valid(p) or not p.can_progress_objective():
 			continue
 		var inside := Vector2(p.global_position.x - bp.x, p.global_position.z - bp.z).length() <= BEACON_RADIUS and absf(p.global_position.y - bp.y) < 4.0
 		if inside:

@@ -96,6 +96,8 @@ func _on_fx(kind: String, _id: int, pos: Vector3) -> void:
 		"rewind_start":
 			_spark(pos + Vector3(0, 1.2, 0), Palette.COBALT, 0.45, 1.6)
 			Sfx.play("rewind", -2.0)
+		"death":
+			_spark(pos + Vector3(0, 1.0, 0), Palette.VERMILION, 0.7, 2.2)
 		"ff_start":
 			_spark(pos + Vector3(0, 0.3, 0), Palette.VERMILION, 0.6, 3.0)
 			Sfx.play("ff", -3.0)

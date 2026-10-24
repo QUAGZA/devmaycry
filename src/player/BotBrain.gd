@@ -238,6 +238,18 @@ func _has_los(other: Player) -> bool:
 
 
 # ---------------------------------------------------------------- decisions
+## Called when the bot respawns: forget the path and target from before the death so it does not resume a stale route.
+func on_respawn() -> void:
+	path = PackedVector3Array()
+	path_i = 0
+	goal_kind = ""
+	target = null
+	stuck_t = 0.0
+	stuck_pos = p.global_position
+	stuck_count = 0
+	decide_t = 0.0
+
+
 func _decide() -> void:
 	var ms := Game.match_server
 	if ms == null:

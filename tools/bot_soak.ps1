@@ -21,6 +21,8 @@ foreach ($m in $Maps) {
   $row = [ordered]@{
     rounds_started = Count '"cat":"Round","ev":"start"'
     kills = Count '"cat":"Round","cause"'
+    respawns = Count '"cat":"Round","ev":"respawn"'
+    ended_by_elimination = Count '"reason":"eliminated"'
     pickups = Count '"cat":"Objective","ev":"pickup"'
     detonations = Count '"cat":"Objective","ev":"detonation"'
     stabilized = Count '"ev":"stabilized"|"reason":"stabilized"'

@@ -22,6 +22,7 @@ var sub_notice_lbl: Label
 var crosshair: Control
 var flash: ColorRect
 var protect_lbl: Label
+var _dead_since := -1.0
 var site_lbl: Label
 var progress_box: Control
 var progress_lbl: Label
@@ -198,7 +199,7 @@ func _build() -> void:
 	hp_bar.color = Palette.MINT
 	hp_bar.size = Vector2(260, 8)
 	hp_bar_bg.add_child(hp_bar)
-	protect_lbl = UiTheme.stamp("SPAWN SHIELD", Palette.BRASS, 13)
+	protect_lbl = UiTheme.stamp("INVULNERABLE", UiTheme.TEAL, 18)
 	protect_lbl.visible = false
 	bl.add_child(protect_lbl)
 
@@ -620,12 +621,26 @@ func _process(delta: float) -> void:
 				hint_lbl.text = "REVERSE ENTROPY / RE-TRAVERSING YOUR ROUTE"
 		else:
 			_update_card(echo_card, p.echo_cd, 18.0)
-		protect_lbl.visible = p.spawn_protect_t > 0.0
+		protect_lbl.visible = p.is_protected()
+		if protect_lbl.visible:
+			protect_lbl.text = "INVULNERABLE — %ds   (WEAPONS AND OBJECTIVES LOCKED)" % int(ceil(p.spawn_protect_t))
 		dead_lbl.visible = not p.alive
 		if p.alive:
 			dead_lbl.text = ""
-		elif Game.spectating != "":
-			dead_lbl.text = "ELIMINATED / SPECTATING %s" % Game.spectating
+			_dead_since = -1.0
+		else:
+			if _dead_since < 0.0:
+				_dead_since = Time.get_ticks_msec() / 1000.0
+			var head := dead_lbl.text.get_slice("
+", 0)
+			if not head.begins_with("ELIMINATED BY"):
+				head = "ELIMINATED / SPECTATING %s" % Game.spectating if Game.spectating != "" else "ELIMINATED"
+			if str(Game.state.get("phase", "live")) in ["live", "planted", "sudden_death"]:
+				var left := maxf(0.0, MatchServer.RESPAWN_DELAY - (Time.get_ticks_msec() / 1000.0 - _dead_since))
+				dead_lbl.text = "%s
+RESPAWNING IN %d" % [head, int(ceil(left))]
+			else:
+				dead_lbl.text = head
 		var hint := ""
 		var core_live: Dictionary = Game.live.get("core", {})
 		if str(core_live.get("mode", "")) == "planted":

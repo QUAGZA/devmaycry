@@ -36,6 +36,9 @@ func clear() -> void:
 
 ## Server: spawn one projectile. Returns its id.
 func fire(owner_id: int, weapon: String, origin: Vector3, velocity: Vector3, damage: float, exclude: RID) -> int:
+	var shooter = Game.players.get(owner_id)
+	if shooter != null and is_instance_valid(shooter) and not shooter.can_deal_damage():
+		return 0   # a protected player deals no damage by any weapon path
 	var id := next_id
 	next_id += 1
 	var t: float = Game.match_server.match_time if Game.match_server != null else 0.0
@@ -86,7 +89,7 @@ func _server_replays() -> void:
 			continue
 		pending_replays.erase(r)
 		var owner: Player = Game.players.get(int(r["owner"]))
-		if owner == null or not is_instance_valid(owner) or not owner.alive:
+		if owner == null or not is_instance_valid(owner) or not owner.can_deal_damage():
 			Game.log_ev("Weapon", "replay_cancelled", {"shot": r["record"]["id"], "owner": r["owner"]})
 			continue
 		var rec: Dictionary = r["record"]

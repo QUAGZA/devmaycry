@@ -66,7 +66,15 @@ func respawn_point(p: Player) -> Dictionary:
 		return def.pick_spawn("ffa", _spawn_counter)
 	var best: Dictionary = candidates[0]
 	var best_d := -1.0
+	var world: World3D = Game.world.get_world_3d() if Game.world != null else null
 	for c in candidates:
+		# a point inside geometry or on top of a living player is never used while a free one exists
+		var penalty := 0.0
+		if world != null and Features.blocked(world, c["position"]):
+			penalty = 1000.0
+		for other2: Player in Game.players.values():
+			if is_instance_valid(other2) and other2 != p and other2.alive and other2.global_position.distance_to(c["position"]) < 1.2:
+				penalty = maxf(penalty, 500.0)
 		var dmin := 1e9
 		for other: Player in Game.players.values():
 			if not is_instance_valid(other) or other == p or not other.alive:
@@ -74,7 +82,7 @@ func respawn_point(p: Player) -> Dictionary:
 			if p.team != 0 and other.team == p.team:
 				continue
 			dmin = minf(dmin, other.global_position.distance_to(c["position"]))
-		dmin += randf() * 2.0
+		dmin += randf() * 2.0 - penalty
 		if dmin > best_d:
 			best_d = dmin
 			best = c
@@ -137,14 +145,16 @@ func cancel_respawns() -> void:
 
 func _do_respawn(id: int) -> void:
 	var p = Game.players.get(id)
-	if p == null or not is_instance_valid(p):
-		return
+	if p == null or not is_instance_valid(p) or p.alive:
+		return   # removed, or already alive: one death never produces two respawns
+	if phase != "live" and phase != "planted" and phase != "sudden_death":
+		return   # the next round start respawns everyone
 	var sp := respawn_point(p)
-	var protect := 2.0
+	var protect := Player.RESPAWN_PROTECT
 	if rules != null and rules.has_method("spawn_protection"):
 		protect = rules.spawn_protection()
 	Game.rpc_respawn.rpc(id, sp["position"], sp["yaw"], protect)
-	Game.log_ev("Round", "respawn", {"id": id})
+	Game.log_ev("Round", "respawn", {"id": id, "team": p.team, "pos": [snappedf(sp["position"].x, 0.1), snappedf(sp["position"].y, 0.1), snappedf(sp["position"].z, 0.1)], "protect": protect})
 
 
 func on_out_of_bounds(p: Player) -> void:
@@ -190,6 +200,10 @@ func on_rewind_pass(p: Player, historical_t: float) -> void:
 
 
 func request_ability(p: Player) -> void:
+	if p.is_protected():
+		if p.id > 0:
+			Game.rpc_notice.rpc_id(p.id, "PROTECTED  /  ABILITIES UNLOCK WHEN THE SHIELD ENDS", 1.2)
+		return
 	if rules != null and rules.has_method("request_ability"):
 		rules.request_ability(p)
 	else:
