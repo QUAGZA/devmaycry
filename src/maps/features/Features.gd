@@ -40,13 +40,13 @@ static func players_in(area: Area3D) -> Array:
 ## paired exit facing outward. Per-player re-entry lockout prevents bounce loops.
 class PhaseGate extends Area3D:
 	const ACTIVATION := 0.45
-	const CORE_ACTIVATION := 0.9
 	const LOCKOUT := 2.5
 	var exit_pos := Vector3.ZERO
 	var exit_yaw := 0.0
 	var gate_name := ""
 	var progress: Dictionary = {}
 	var lockout: Dictionary = {}
+	var refused: Dictionary = {}       # carriers told the gate will not take the Core (message throttle)
 	var ring: MeshInstance3D
 
 	func setup(pos: Vector3, yaw_deg: float, exit: Vector3, exit_yaw_deg: float, gname: String) -> void:
@@ -118,13 +118,26 @@ class PhaseGate extends Area3D:
 			lockout[id] -= delta
 			if lockout[id] <= 0.0:
 				lockout.erase(id)
+		for id in refused.keys():
+			refused[id] -= delta
+			if refused[id] <= 0.0:
+				refused.erase(id)
 		var inside := {}
 		for p in Features.players_in(self):
 			inside[p.id] = true
 			if lockout.has(p.id) or p.zip_t > 0.0:
 				continue
+			if p.carrying_core:
+				# the carry routes (and the 26 s fuse) are tuned around walking: a gate would skip them
+				if not refused.has(p.id):
+					refused[p.id] = 2.5
+					Game.log_ev("Feature", "gate_refused_core", {"id": p.id, "gate": gate_name})
+					if p.id > 0:
+						Game.rpc_notice.rpc_id(p.id, "PHASE GATES REFUSE THE CAUSAL CORE", 1.6)
+				progress.erase(p.id)
+				continue
 			progress[p.id] = float(progress.get(p.id, 0.0)) + delta
-			var need := CORE_ACTIVATION if p.carrying_core else ACTIVATION
+			var need := ACTIVATION
 			if progress[p.id] >= need:
 				progress.erase(p.id)
 				lockout[p.id] = LOCKOUT
@@ -147,6 +160,7 @@ class Zipline extends Node3D:
 	var anchors: Array = []
 	var riders: Dictionary = {}
 	var lockout: Dictionary = {}
+	var refused: Dictionary = {}
 
 	func setup(from: Vector3, to: Vector3, zname: String) -> void:
 		a = from
@@ -216,9 +230,21 @@ class Zipline extends Node3D:
 			lockout[id] -= delta
 			if lockout[id] <= 0.0:
 				lockout.erase(id)
+		for id in refused.keys():
+			refused[id] -= delta
+			if refused[id] <= 0.0:
+				refused.erase(id)
 		for i in anchors.size():
 			for p in Features.players_in(anchors[i]):
 				if riders.has(p.id) or lockout.has(p.id) or not p.interact_held or p.zip_t > 0.0:
+					continue
+				if p.carrying_core:
+					# cables are shortcuts over the carry route: the Core is too volatile to hang from one
+					if not refused.has(p.id):
+						refused[p.id] = 2.5
+						Game.log_ev("Feature", "zip_refused_core", {"id": p.id, "zip": zip_name})
+						if p.id > 0:
+							Game.rpc_notice.rpc_id(p.id, "THE CAUSAL CORE CANNOT RIDE A ZIPLINE", 1.6)
 					continue
 				var start: Vector3 = a if i == 0 else b
 				var goal: Vector3 = b if i == 0 else a
@@ -226,7 +252,6 @@ class Zipline extends Node3D:
 				riders[p.id] = {"t": 0.0, "dur": dur, "from": start, "to": goal}
 				p.zip_t = dur + 0.05
 				p.velocity = Vector3.ZERO
-				p.carrying_core = p.carrying_core
 				Game.rpc_fx.rpc("zip", p.id, p.global_position)
 				Game.log_ev("Feature", "zip_attach", {"id": p.id, "zip": zip_name, "dur": snappedf(dur, 0.1)})
 		for id in riders.keys():
@@ -267,6 +292,7 @@ class VectorSling extends Area3D:
 	var sling_name := ""
 	var cooldown := 0.0
 	var lockout: Dictionary = {}
+	var refused: Dictionary = {}
 	var arrow: MeshInstance3D
 
 	func setup(pos: Vector3, land: Vector3, flight_time: float, sname: String) -> void:
@@ -373,10 +399,22 @@ class VectorSling extends Area3D:
 			lockout[id] -= delta
 			if lockout[id] <= 0.0:
 				lockout.erase(id)
+		for id in refused.keys():
+			refused[id] -= delta
+			if refused[id] <= 0.0:
+				refused.erase(id)
 		if cooldown > 0.0:
 			return
 		for p in Features.players_in(self):
 			if lockout.has(p.id) or p.zip_t > 0.0 or not p.is_on_floor():
+				continue
+			if p.carrying_core:
+				# pads would turn the measured carry routes into a jump: the Core is too volatile to be launched
+				if not refused.has(p.id):
+					refused[p.id] = 2.5
+					Game.log_ev("Feature", "sling_refused_core", {"id": p.id, "sling": sling_name})
+					if p.id > 0:
+						Game.rpc_notice.rpc_id(p.id, "LAUNCH PADS REFUSE THE CAUSAL CORE", 1.6)
 				continue
 			p.global_position = Vector3(global_position.x, p.global_position.y, global_position.z)
 			var d: Vector3 = target - p.global_position

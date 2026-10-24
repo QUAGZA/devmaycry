@@ -94,7 +94,7 @@ func _on_fx(kind: String, _id: int, pos: Vector3) -> void:
 			_spark(pos + Vector3(0, 1.5, 0), Palette.MINT, 1.0, 4.0)
 			Sfx.play("sting", -4.0)
 		"rewind_start":
-			_spark(pos + Vector3(0, 1.2, 0), Palette.COBALT, 0.6, 2.0)
+			_spark(pos + Vector3(0, 1.2, 0), Palette.COBALT, 0.45, 1.6)
 			Sfx.play("rewind", -2.0)
 		"ff_start":
 			_spark(pos + Vector3(0, 0.3, 0), Palette.VERMILION, 0.6, 3.0)
@@ -116,28 +116,43 @@ func _on_damage(victim_id: int, _attacker_id: int, _amount: float, _hp_after: fl
 		_spark(v.global_position + Vector3(0, 1.3, 0), Palette.VERMILION, 0.2, 0.35)
 
 
+const BUBBLE := preload("res://src/shaders/fx_bubble.gdshader")
+
+
+## Short light burst. Small bursts (impacts, muzzle) are tiny unshaded spheres; large ones (teleport, rewind,
+## stabilize, detonation) are soft additive bubbles that swell while they fade, never a hard faceted ball.
 func _spark(pos: Vector3, color: Color, life: float, size: float) -> void:
 	var h := _holder()
 	if h == null:
 		return
+	var soft := size >= 1.0
 	var s := MeshInstance3D.new()
 	var sm := SphereMesh.new()
 	sm.radius = size * 0.5
 	sm.height = size
-	sm.radial_segments = 10
-	sm.rings = 5
+	sm.radial_segments = 28 if soft else 8
+	sm.rings = 14 if soft else 4
 	s.mesh = sm
-	var m := StandardMaterial3D.new()
-	m.albedo_color = color
-	m.emission_enabled = true
-	m.emission = color
-	m.emission_energy_multiplier = 3.0
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	s.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var m: Material
+	if soft:
+		var sh := ShaderMaterial.new()
+		sh.shader = BUBBLE
+		sh.set_shader_parameter("tint", color)
+		m = sh
+	else:
+		var sm2 := StandardMaterial3D.new()
+		sm2.albedo_color = color
+		sm2.emission_enabled = true
+		sm2.emission = color
+		sm2.emission_energy_multiplier = 3.0
+		sm2.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		sm2.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m = sm2
 	s.material_override = m
 	h.add_child(s)
 	s.global_position = pos
-	_items.append({"node": s, "t": life, "life": life, "mat": m})
+	_items.append({"node": s, "t": life, "life": life, "mat": m, "soft": soft})
 
 
 func _process(delta: float) -> void:
@@ -150,7 +165,10 @@ func _process(delta: float) -> void:
 				n.queue_free()
 			continue
 		var a: float = clampf(it["t"] / it["life"], 0.0, 1.0)
-		var m: StandardMaterial3D = it["mat"]
-		m.albedo_color.a = a
+		if bool(it.get("soft", false)):
+			(it["mat"] as ShaderMaterial).set_shader_parameter("fade", a)
+			n.scale = Vector3.ONE * lerpf(1.25, 0.55, a)
+		else:
+			(it["mat"] as StandardMaterial3D).albedo_color.a = a
 		keep.append(it)
 	_items = keep

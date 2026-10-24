@@ -43,6 +43,7 @@ static func slab(def: MapDef, pts: PackedVector2Array, top: float, thick: float,
 		return null
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)   # flat shading: extruded architecture must not get rounded normals
 	var faces := PackedVector3Array()
 	var bot := top - thick
 	# top (CCW seen from above in Godot's -Z-forward convention => wind so normals point up)
@@ -160,6 +161,7 @@ static func ladder(def: MapDef, base: Vector3, top_y: float, outward: Vector3, l
 	def.features.add_child(l)
 	var link := NavigationLink3D.new()
 	link.bidirectional = true
+	link.navigation_layers = 2   # layer 2: ladder links, usable by bots that are not carrying the Core
 	link.start_position = base + outward * 0.9
 	link.end_position = Vector3(base.x, top_y, base.z) - outward * 1.4
 	def.features.add_child(link)

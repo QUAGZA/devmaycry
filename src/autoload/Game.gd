@@ -46,6 +46,7 @@ var _waiting_spawn := false
 var _quit_t := -1.0
 var _shots: Array = []
 var _shot_elapsed := 0.0
+var shots_done := 0               # screenshots saved so far (review cameras switch on it)
 var _log_snap_t := 0.0
 var _probed := false
 var _window_logged := false
@@ -169,6 +170,7 @@ func rpc_load_map(map_id_: String, mode_id_: String) -> void:
 	results = {}
 	_clear_match_nodes()
 	_shot_elapsed = 0.0
+	Music.fade_out()
 	get_tree().change_scene_to_file("res://src/match/Match.tscn")
 
 
@@ -379,8 +381,11 @@ func _physics_process(delta: float) -> void:
 			var want := Vector3(float(v[0]), float(v[1]), float(v[2]))
 			var closest := NavigationServer3D.map_get_closest_point(map_rid, want)
 			var from := Vector3(float(v[3]), float(v[4]), float(v[5])) if v.size() >= 6 else Vector3.ZERO
-			var path := NavigationServer3D.map_get_path(map_rid, from, want, true)
-			log_ev("Nav", "probe", {"want": [want.x, want.y, want.z], "closest": [snappedf(closest.x, 0.1), snappedf(closest.y, 0.1), snappedf(closest.z, 0.1)], "path_len": path.size(), "path_end": [snappedf(path[path.size() - 1].x, 0.1), snappedf(path[path.size() - 1].y, 0.1), snappedf(path[path.size() - 1].z, 0.1)] if path.size() > 0 else []})
+			var path := NavigationServer3D.map_get_path(map_rid, from, want, true, int(args.get("navlayers", "1")))
+			var metres := 0.0
+			for j in range(1, path.size()):
+				metres += path[j - 1].distance_to(path[j])
+			log_ev("Nav", "probe", {"metres": snappedf(metres, 0.1), "want": [want.x, want.y, want.z], "closest": [snappedf(closest.x, 0.1), snappedf(closest.y, 0.1), snappedf(closest.z, 0.1)], "path_len": path.size(), "path_end": [snappedf(path[path.size() - 1].x, 0.1), snappedf(path[path.size() - 1].y, 0.1), snappedf(path[path.size() - 1].z, 0.1)] if path.size() > 0 else []})
 	if local_player != null and is_instance_valid(local_player):
 		var inp: Array = local_player.gather_input()
 		if multiplayer.is_server():
@@ -462,10 +467,12 @@ func _take_screenshot(at: float) -> void:
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()
 	var base := str(args.get("screenshot", "build/shots/shot"))
-	var path := "%s_%d_%02d.png" % [base, multiplayer.get_unique_id(), int(at)]
+	var stamp := "%02d" % int(at) if is_equal_approx(at, roundf(at)) else "%.2f" % at
+	var path := "%s_%d_%s.png" % [base, multiplayer.get_unique_id(), stamp]
 	var abs_path := ProjectSettings.globalize_path("res://" + path) if not path.begins_with("/") and path.find(":") < 0 else path
 	DirAccess.make_dir_recursive_absolute(abs_path.get_base_dir())
 	var err := img.save_png(abs_path)
+	shots_done += 1
 	log_ev("Shot", "saved", {"path": abs_path, "err": err})
 
 

@@ -6,3 +6,7 @@ build/
 
 # raw downloaded asset packs: kept locally, not redistributed (see ASSET_REGISTER.md)
 assets/_source/
+
+# python bytecode from tools/mapproto
+__pycache__/
+*.pyc

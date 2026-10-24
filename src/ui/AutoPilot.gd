@@ -138,7 +138,7 @@ func nav_step(p: Player, target: Vector3) -> Dictionary:
 	_repath_t -= 1.0 / 60.0
 	if _path.is_empty() or _repath_t <= 0.0 or _path_target.distance_to(target) > 0.5:
 		var map_rid := p.get_world_3d().navigation_map
-		_path = NavigationServer3D.map_get_path(map_rid, p.global_position, target, true)
+		_path = NavigationServer3D.map_get_path(map_rid, p.global_position, target, true, 1 if p.carrying_core else 3)
 		_path_i = 0
 		_repath_t = 1.0
 		_path_target = target

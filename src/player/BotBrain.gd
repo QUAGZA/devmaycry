@@ -464,7 +464,8 @@ func _follow(delta: float) -> Dictionary:
 		return {"move": Vector2.ZERO, "yaw": aim_yaw, "arrived": true}
 	if path.is_empty() or repath_t <= 0.0:
 		var map_rid := p.get_world_3d().navigation_map
-		path = NavigationServer3D.map_get_path(map_rid, p.global_position, goal, true)
+		# navigation layer 2 holds the ladder links: open to everyone except a Core carrier (two hands on the Core)
+		path = NavigationServer3D.map_get_path(map_rid, p.global_position, goal, true, 1 if p.carrying_core else 3)
 		path_i = 0
 		repath_t = rng.randf_range(0.7, 1.1)
 	var next := goal if path.is_empty() else path[path.size() - 1]
