@@ -86,6 +86,12 @@ func play_reload() -> void:
 		anim.queue("Pistol_Aim_Neutral")
 
 
+## A weapon switch cancels an unfinished reload animation (the reload itself is cancelled server-side).
+func cancel_reload() -> void:
+	if anim != null and anim.current_animation == "Pistol_Reload" and anim.has_animation("Pistol_Aim_Neutral"):
+		anim.play("Pistol_Aim_Neutral", 0.05)
+
+
 func play_shoot() -> void:
 	if anim != null and anim.has_animation("Pistol_Shoot") and anim.current_animation != "Pistol_Reload":
 		anim.play("Pistol_Shoot", 0.03)

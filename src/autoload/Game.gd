@@ -13,6 +13,9 @@ signal fx(kind: String, id: int, pos: Vector3)
 signal match_scene_ready
 signal echo_spawned(echo: Node)
 signal results_ready(results: Dictionary)
+signal armory_requested(seconds: float, initial: bool)
+signal armory_ack(picks: Array, accepted: bool, reason: String)
+signal armory_closed
 
 const SNAPSHOT_EVERY := 2
 const MAP_READY_TIMEOUT := 20.0
@@ -35,6 +38,8 @@ var match_server: MatchServer = null
 var autopilot = null
 var projectiles: ProjectileManager = null
 var paused_local := false
+var armory_open := false           # the local armory screen is up: mouse free, no combat input
+var armory: ArmoryFlow = null      # server only: the pre-match loadout phase
 var map_open := false
 var echoes: Dictionary = {}
 var props: Dictionary = {}
@@ -203,6 +208,8 @@ func _clear_match_nodes() -> void:
 	state = {}
 	live = {}
 	spectating = ""
+	armory = null
+	armory_open = false
 	if match_server != null:
 		match_server.queue_free()
 		match_server = null
@@ -257,7 +264,12 @@ func _spawn_all() -> void:
 		var sp: Dictionary = match_server.spawn_for(info, i)
 		rpc_spawn_player.rpc(id, info, sp["position"], sp["yaw"])
 		i += 1
-	match_server.begin()
+	if args.has("no-armory"):
+		match_server.begin()
+	else:
+		# Armory first: the round and match timers start only when every human answered or the timeout hit.
+		armory = ArmoryFlow.new()
+		armory.start(_armory_rng())
 
 
 @rpc("authority", "call_local", "reliable")
@@ -399,6 +411,11 @@ func _physics_process(delta: float) -> void:
 	if args.has("respawn-selftest") and not _probed and match_server != null and match_server.phase == "live" and map_def != null:
 		_probed = true
 		_respawn_selftest()
+	if args.has("armory-selftest") and not _probed and armory != null and armory.active and map_def != null:
+		_probed = true
+		var st := ArmorySelfTest.new()
+		add_child(st)
+		st.run()
 	if args.has("featureprobe") and not _probed and server_tick > 60 and map_def != null:
 		_probed = true
 		_feature_probe()
@@ -429,7 +446,9 @@ func _physics_process(delta: float) -> void:
 		for p in players.values():
 			if is_instance_valid(p):
 				p.server_step(delta)
-		if match_server != null:
+		if armory != null:
+			armory.step(delta)
+		if match_server != null and (armory == null or not armory.active):
 			match_server.step(delta)
 		if server_tick % SNAPSHOT_EVERY == 0:
 			_send_snapshot()
@@ -894,20 +913,21 @@ func rpc_recoil(dyaw: float, dpitch: float) -> void:
 @rpc("authority", "call_local", "unreliable")
 func rpc_muzzle(shooter_id: int, weapon: String) -> void:
 	var p = players.get(shooter_id)
-	var cue_by := {"rifle": "shot", "shotgun": "shot_shotgun", "sniper": "shot_sniper", "mg": "shot_mg"}
+	var cue_by := {"rifle": "shot", "shotgun": "shot_shotgun", "sniper": "shot_sniper", "mg": "shot_mg", "deagle": "shot_sniper"}
 	var cue: String = cue_by.get(weapon, "shot")
+	var pitch_mul := 0.78 if weapon == "deagle" else 1.0   # Desert Eagle: the sniper crack dropped into a heavier boom
 	if p != null and is_instance_valid(p):
 		if p.is_local():
 			p.kick_view()
 			p.eject_shell()
 			if p.fp_arms != null:
 				p.fp_arms.play_shoot()
-			Sfx.play(cue, -5.0, randf_range(0.98, 1.02))
+			Sfx.play(cue, -5.0, randf_range(0.98, 1.02) * pitch_mul)
 		else:
 			var d: float = local_player.global_position.distance_to(p.global_position) if local_player != null and is_instance_valid(local_player) else 30.0
-			Sfx.play(cue, -10.0 - clampf(d / 6.0, 0.0, 18.0), randf_range(0.95, 1.05))
+			Sfx.play(cue, -10.0 - clampf(d / 6.0, 0.0, 18.0), randf_range(0.95, 1.05) * pitch_mul)
 		fx.emit("muzzle", shooter_id, p.muzzle_position())
-		if weapon == "rifle" or weapon == "mg" or weapon == "sniper":
+		if weapon == "rifle" or weapon == "mg" or weapon == "sniper" or weapon == "deagle":
 			var shell_pos: Vector3 = p.global_position + Vector3(0, 0.1, 0)
 			get_tree().create_timer(0.35).timeout.connect(func() -> void: Sfx.play_at("shell", shell_pos, -16.0 if p.is_local() else -12.0, 1.5))
 		if not p.is_local() and p.rig != null:
@@ -919,6 +939,68 @@ func rpc_prop_state(prop_id: int, state: String, version: int, t: float) -> void
 	var prop = props.get(prop_id)
 	if prop != null and is_instance_valid(prop):
 		prop.apply_state(state, version, t)
+
+
+# ---------------------------------------------------------------- armory (loadout selection)
+func _armory_rng() -> RandomNumberGenerator:
+	var r := RandomNumberGenerator.new()
+	r.randomize()
+	return r
+
+
+## Loadout for automatic answers (headless peers, autopilot, tests): --loadout=sniper,deagle or the default.
+func cli_loadout() -> Array:
+	if args.has("loadout"):
+		var l := str(args["loadout"]).split(",")
+		return Loadout.sanitize([l[0], l[1] if l.size() > 1 else ""])
+	return Loadout.DEFAULT.duplicate()
+
+
+## True when this peer answers the armory itself (no screen): headless runs and scripted autopilot players.
+func armory_auto() -> bool:
+	if args.has("armory-selftest"):
+		return false   # the self-test drives the phase itself
+	return DisplayServer.get_name() == "headless" or (autopilot != null and not args.has("armory-ui"))
+
+
+## Local player's answer. The server applies it directly; clients send it (the server validates every pick).
+func submit_loadout(picks: Array) -> void:
+	if multiplayer.is_server():
+		if armory != null:
+			armory.on_submit(multiplayer.get_unique_id(), picks)
+	else:
+		rpc_armory_submit.rpc_id(1, picks)
+
+
+func send_armory_ack(pid: int, picks: Array, accepted: bool, reason: String) -> void:
+	if pid == multiplayer.get_unique_id():
+		armory_ack.emit(picks, accepted, reason)
+	elif pid > 1:
+		rpc_armory_ack.rpc_id(pid, picks, accepted, reason)
+
+
+@rpc("authority", "call_local", "reliable")
+func rpc_armory_open(seconds: float, initial: bool) -> void:
+	if armory_auto():
+		submit_loadout(cli_loadout())
+		return
+	armory_requested.emit(seconds, initial)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func rpc_armory_submit(picks: Array) -> void:
+	if multiplayer.is_server() and armory != null:
+		armory.on_submit(multiplayer.get_remote_sender_id(), picks)
+
+
+@rpc("authority", "call_remote", "reliable")
+func rpc_armory_ack(picks: Array, accepted: bool, reason: String) -> void:
+	armory_ack.emit(picks, accepted, reason)
+
+
+@rpc("authority", "call_local", "reliable")
+func rpc_armory_close() -> void:
+	armory_closed.emit()
 
 
 @rpc("authority", "call_local", "reliable")

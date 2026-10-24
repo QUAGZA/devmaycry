@@ -9,8 +9,8 @@ Stabilizer before its 26-second volatility fuse detonates. Two Stability Fields 
 the fuse for 7 seconds. Attackers get **Reverse Entropy** (once per round: drop the Core, rewind its volatility
 6 seconds and freeze it while your body re-traverses your route backwards, aiming and firing freely). Defenders
 get **Fast-Forward Entropy** (once per round: an 8 m / 3 s field that speeds the fuse, bullets and their own
-aim). Tagged barricades restore as temporary cover along a rewinding player's path. Four original projectile
-weapons with learnable recoil, humanoid player figures, three arenas with their own traversal mechanic (phase
+aim). Tagged barricades restore as temporary cover along a rewinding player's path. Four armory weapons (Desert Eagle, rifle,
+shotgun, sniper; pick any two for free before each match, 1 / 2 / wheel to switch) with learnable recoil, humanoid player figures, three arenas with their own traversal mechanic (phase
 gates, ziplines, vector slings), bots at three difficulties, LAN rooms with 6-character codes, and
 **RELIC RUSH** as a free-for-all secondary mode.
 

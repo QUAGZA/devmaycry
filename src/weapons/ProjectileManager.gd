@@ -17,7 +17,7 @@ const HISTORY_MAX := 12
 const HISTORY_SAMPLES := 40
 const RETRIEVE_WINDOW := 8.0
 const RETRIEVE_TIME := 0.8
-const RETRIEVABLE := ["rifle", "sniper", "mg"]
+const RETRIEVABLE := ["rifle", "sniper", "mg", "deagle"]
 var history: Dictionary = {}    # owner -> Array[record]
 var records: Dictionary = {}    # projectile id -> record (same dicts as in history)
 var pending_replays: Array = [] # [{owner, record, at}]
@@ -251,7 +251,7 @@ func _make_visual(id: int, origin: Vector3, velocity: Vector3, weapon: String) -
 		return
 	var mi := MeshInstance3D.new()
 	var bm := BoxMesh.new()
-	var len := 0.9 if weapon == "sniper" else (0.35 if weapon == "shotgun" else 0.6)
+	var len := 0.9 if weapon == "sniper" else (0.35 if weapon == "shotgun" else (0.5 if weapon == "deagle" else 0.6))
 	bm.size = Vector3(0.05, 0.05, len)
 	mi.mesh = bm
 	mi.material_override = _mat(weapon)

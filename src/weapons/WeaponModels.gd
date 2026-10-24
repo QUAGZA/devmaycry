@@ -12,6 +12,7 @@ const DEF := {
 	"shotgun": ["blaster-l.glb", 1.05, Color("B98A3A"), []],
 	"sniper":  ["blaster-e.glb", 1.0, Color("3E5F9E"), [["scope-large-a.glb", Vector3(0, 0.16, 0.0), 1.0]]],
 	"mg":      ["blaster-a.glb", 1.15, Color("7A8C3E"), [["clip-large.glb", Vector3(0, -0.2, 0.0), 1.3]]],
+	"deagle":  ["blaster-b.glb", 1.3, Color("FFB454"), []],
 }
 
 static var _aabb_cache: Dictionary = {}

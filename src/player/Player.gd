@@ -16,6 +16,9 @@ const BTN_SLOT1 := 512
 const BTN_SLOT2 := 1024
 const BTN_SLOT3 := 2048
 const BTN_SLOT4 := 4096
+## Two-slot loadout: SLOT1/SLOT2 select the equipped weapons, PREV/NEXT are the mouse wheel (SLOT3/SLOT4 are unused).
+const BTN_PREV := 8192
+const BTN_NEXT := 16384
 
 const WALK_SPEED := 6.0
 const SPRINT_SPEED := 8.6
@@ -109,6 +112,13 @@ var spray := 0.0
 var spray_t := 0.0
 var ads := false
 var switch_t := 0.0
+## Two equipped weapons (distinct ids from Weapons.ARMORY) and the active slot index; weapon_id == loadout[slot].
+var loadout: Array = ["rifle", "deagle"]
+var slot := 0
+var cd_store: Dictionary = {}     # weapon id -> fire cooldown left while it is holstered (no swap-cancel of rate of fire)
+var _wheel_hold := 0              # physics frames the wheel button bit stays set (survives a dropped unreliable input packet)
+var _wheel_bit := 0
+var _built := false
 var viewmodels: Dictionary = {}
 var _fov_target := 86.0
 var brain = null
@@ -219,6 +229,7 @@ func _init() -> void:
 	viewmodel.visible = false
 	cam.add_child(viewmodel)
 	_build_viewmodel()
+	_built = true
 	_reset_ammo()
 	tag = Label3D.new()
 	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -265,43 +276,55 @@ func _build_viewmodel() -> void:
 	if fp_arms.ok:
 		fp_arms.position = FP_BODY_OFFSET
 		_vm_base = Vector3.ZERO
-		for wid in Weapons.ORDER:
-			var w := WeaponModels.build(wid)
-			if w == null:
-				continue
-			w.name = wid
-			w.scale = Vector3.ONE * 0.32
-			w.position = FP_GRIP_OFFSET
-			w.visible = wid == weapon_id
-			fp_arms.weapon_root.add_child(w)
-			viewmodels[wid] = w
+		for wid in loadout:
+			_ensure_viewmodel(wid)
 		return
 	fp_arms.queue_free()
 	fp_arms = null
+	for wid in loadout:
+		_ensure_viewmodel(wid)
+
+
+## Builds the first-person model for one weapon once (never duplicated); only equipped weapons are built.
+func _ensure_viewmodel(wid: String) -> void:
+	if viewmodels.has(wid) and is_instance_valid(viewmodels[wid]):
+		return
+	if _built and not _local:
+		return   # other players never show a first-person model: their weapon is drawn on the rig
+	if fp_arms != null and fp_arms.ok:
+		var w := WeaponModels.build(wid)
+		if w == null:
+			return
+		w.name = wid
+		w.scale = Vector3.ONE * 0.32
+		w.position = FP_GRIP_OFFSET
+		w.visible = wid == weapon_id
+		fp_arms.weapon_root.add_child(w)
+		viewmodels[wid] = w
+		return
 	var sleeve := Style.surface("cloth", Color("3A4150"))
 	var cuff := Style.surface("gear", Color("2B2E2B"))
 	var glove := Style.surface("gear", Color("50473C"))
-	for wid in Weapons.ORDER:
-		var root := Node3D.new()
-		root.name = wid
-		var w := WeaponModels.build(wid)
-		if w == null:
-			continue
-		w.scale = Vector3.ONE * 0.42
-		root.add_child(w)
-		var length: float = float(w.get_meta("length", 0.8)) * 0.42
-		# right hand on the grip, forearm running back and down out of frame
-		var grip := Vector3(0.0, -0.075, 0.06)
-		_limb(root, grip + Vector3(0.0, -0.01, 0.02), grip + Vector3(0.12, -0.2, 0.42), 0.042, sleeve)
-		_limb(root, grip + Vector3(0.0, -0.005, 0.02), grip + Vector3(0.02, -0.03, 0.1), 0.046, cuff)
-		_hand(root, grip, glove)
-		# support hand on the fore-end, forearm crossing in from the lower left
-		var fore := Vector3(0.0, -0.05, -length * 0.38)
-		_limb(root, fore + Vector3(-0.01, -0.02, 0.03), fore + Vector3(-0.24, -0.26, 0.4), 0.04, sleeve)
-		_hand(root, fore, glove)
-		root.visible = wid == weapon_id
-		viewmodel.add_child(root)
-		viewmodels[wid] = root
+	var root := Node3D.new()
+	root.name = wid
+	var w2 := WeaponModels.build(wid)
+	if w2 == null:
+		return
+	w2.scale = Vector3.ONE * 0.42
+	root.add_child(w2)
+	var length: float = float(w2.get_meta("length", 0.8)) * 0.42
+	# right hand on the grip, forearm running back and down out of frame
+	var grip := Vector3(0.0, -0.075, 0.06)
+	_limb(root, grip + Vector3(0.0, -0.01, 0.02), grip + Vector3(0.12, -0.2, 0.42), 0.042, sleeve)
+	_limb(root, grip + Vector3(0.0, -0.005, 0.02), grip + Vector3(0.02, -0.03, 0.1), 0.046, cuff)
+	_hand(root, grip, glove)
+	# support hand on the fore-end, forearm crossing in from the lower left
+	var fore := Vector3(0.0, -0.05, -length * 0.38)
+	_limb(root, fore + Vector3(-0.01, -0.02, 0.03), fore + Vector3(-0.24, -0.26, 0.4), 0.04, sleeve)
+	_hand(root, fore, glove)
+	root.visible = wid == weapon_id
+	viewmodel.add_child(root)
+	viewmodels[wid] = root
 
 
 ## Cylinder limb between two points in viewmodel space.
@@ -329,28 +352,81 @@ func _hand(parent: Node3D, at: Vector3, mat: Material) -> void:
 	_vm_box(parent, Vector3(0.02, 0.02, 0.06), at + Vector3(-0.028, 0.022, -0.012), mat)
 
 
+## Full ammunition for every weapon and the primary slot selected. Called on every (re)spawn:
+## a respawn or round start always refills both magazines and reserves and equips slot 1.
 func _reset_ammo() -> void:
 	ammo_state.clear()
 	for wid in Weapons.ORDER:
 		var w := Weapons.get_data(wid)
 		ammo_state[wid] = {"mag": int(w["mag"]), "reserve": int(w["reserve"])}
+	cd_store.clear()
+	slot = 0
+	weapon_id = str(loadout[0])
 	ammo = int(ammo_state[weapon_id]["mag"])
 	reserve = int(ammo_state[weapon_id]["reserve"])
 	spray = 0.0
 
 
-func _switch_weapon(wid: String) -> void:
-	if wid == weapon_id or not Weapons.DATA.has(wid):
-		return
+## Stores the active weapon's live counters and returns the full per-weapon table (current slot included).
+func ammo_of(wid: String) -> Dictionary:
+	if wid == weapon_id:
+		return {"mag": ammo, "reserve": reserve}
+	return ammo_state.get(wid, {"mag": 0, "reserve": 0})
+
+
+## Server (and local bookkeeping): equip two distinct weapons. Invalid or duplicate picks are replaced by the
+## default loadout. The weapon in hand stays in hand if it is still equipped; otherwise slot 1 is drawn.
+## Magazines and reserves are untouched (a newly equipped weapon starts with whatever its table holds).
+func set_loadout(picks: Array) -> void:
+	var clean := Loadout.sanitize(picks)
 	ammo_state[weapon_id] = {"mag": ammo, "reserve": reserve}
+	var keep := weapon_id if clean.has(weapon_id) else str(clean[0])
+	loadout = clean
+	for wid in loadout:
+		_ensure_viewmodel(wid)
+	if keep != weapon_id:
+		reload_t = 0.0
+		weapon_id = keep
+		ammo = int(ammo_state[keep]["mag"])
+		reserve = int(ammo_state[keep]["reserve"])
+		spray = 0.0
+		fire_cd = 0.0
+		switch_t = 0.0
+	slot = loadout.find(weapon_id)
+	_update_viewmodel()
+
+
+## Slot index 0/1. Returns true if a switch started.
+func switch_slot(i: int) -> bool:
+	if i < 0 or i >= loadout.size():
+		return false
+	return _switch_weapon(str(loadout[i]))
+
+
+func _switch_weapon(wid: String) -> bool:
+	if wid == weapon_id or not Weapons.DATA.has(wid) or not loadout.has(wid):
+		return false
+	# the outgoing weapon keeps its magazine and reserve; an unfinished reload is cancelled, not completed
+	ammo_state[weapon_id] = {"mag": ammo, "reserve": reserve}
+	cd_store[weapon_id] = fire_cd
 	weapon_id = wid
+	slot = loadout.find(wid)
 	ammo = int(ammo_state[wid]["mag"])
 	reserve = int(ammo_state[wid]["reserve"])
 	reload_t = 0.0
+	_was_reloading = false
+	if fp_arms != null:
+		fp_arms.cancel_reload()
 	spray = 0.0
+	spray_t = 0.0
+	ads = false
 	switch_t = float(Weapons.get_data(wid)["switch"])
-	fire_cd = maxf(fire_cd, switch_t)
+	fire_cd = maxf(float(cd_store.get(wid, 0.0)), switch_t)
+	cd_store.erase(wid)
+	_ensure_viewmodel(wid)
+	_update_viewmodel()
 	Game.rpc_fx.rpc("switch", id, global_position)
+	return true
 
 
 func _update_viewmodel() -> void:
@@ -404,8 +480,13 @@ func eye_position() -> Vector3:
 
 # ---------------------------------------------------------------- input (local)
 func _unhandled_input(event: InputEvent) -> void:
-	if not _local or Game.paused_local:
+	if not _local or Game.paused_local or Game.armory_open:
 		return
+	if _wheel_hold <= 0 and event is InputEventMouseButton and event.pressed and _mouse_ok():
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			wheel_input(-1)
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			wheel_input(1)
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var sens := Settings.mouse_sensitivity * (Player.ff_sens_mult() if ff_until > 0.0 else 1.0)
 		yaw -= event.relative.x * sens
@@ -413,10 +494,23 @@ func _unhandled_input(event: InputEvent) -> void:
 		yaw = wrapf(yaw, -PI, PI)
 
 
+## Mouse wheel: -1 (up) selects the previous slot, +1 (down) the next; with two slots both cycle to the other weapon.
+## The request travels as a button bit that is held a few physics frames so one dropped packet cannot lose it.
+func wheel_input(dir: int) -> void:
+	_wheel_bit = BTN_NEXT if dir > 0 else BTN_PREV
+	_wheel_hold = 4
+
+
+## Mouse captured (headless peers have no mouse and are treated as captured so scripted tests drive the real path).
+func _mouse_ok() -> bool:
+	return Input.mouse_mode == Input.MOUSE_MODE_CAPTURED or DisplayServer.get_name() == "headless"
+
+
 func gather_input() -> Array:
 	if Game.autopilot != null:
 		return Game.autopilot.produce(self)
-	if Game.paused_local or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+	if Game.paused_local or Game.armory_open or not _mouse_ok():
+		_wheel_hold = 0
 		return [Vector2.ZERO, yaw, pitch, 0]
 	var move := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var b := 0
@@ -442,10 +536,9 @@ func gather_input() -> Array:
 		b |= BTN_SLOT1
 	if Input.is_action_just_pressed("slot2"):
 		b |= BTN_SLOT2
-	if Input.is_action_just_pressed("slot3"):
-		b |= BTN_SLOT3
-	if Input.is_action_just_pressed("slot4"):
-		b |= BTN_SLOT4
+	if _wheel_hold > 0:
+		_wheel_hold -= 1
+		b |= _wheel_bit
 	return [move, yaw, pitch, b]
 
 
@@ -574,7 +667,7 @@ func _step_ladder(delta: float, pressed: int) -> void:
 			set_meta("ladder_topped", true)
 			Game.log_ev("Feature", "ladder_top", {"id": id, "y": snappedf(global_position.y, 0.1)})
 		velocity += -ladder_out * 3.5
-		velocity.y = maxf(velocity.y, 1.5)
+		velocity.y = 1.5   # assigned, not max'd: the 4.2 climb speed used to carry the climber 2.4 m above the platform
 	move_and_slide()
 	_weapon_logic(pressed, false)
 	interact_held = (inp_buttons & BTN_INTERACT) != 0
@@ -667,6 +760,8 @@ func _tick_timers(delta: float) -> void:
 	interact_buffer_t = maxf(0.0, interact_buffer_t - delta)
 	launch_t = maxf(0.0, launch_t - delta)
 	switch_t = maxf(0.0, switch_t - delta)
+	for k in cd_store.keys():
+		cd_store[k] = maxf(0.0, float(cd_store[k]) - delta)
 	if spray_t > 0.0:
 		spray_t -= delta
 	else:
@@ -688,15 +783,15 @@ func _start_reload() -> void:
 
 
 func _weapon_logic(pressed: int, staggered: bool) -> void:
-	ads = (inp_buttons & BTN_ADS) != 0
 	if (pressed & BTN_SLOT1) != 0:
-		_switch_weapon("rifle")
+		switch_slot(0)
 	elif (pressed & BTN_SLOT2) != 0:
-		_switch_weapon("shotgun")
-	elif (pressed & BTN_SLOT3) != 0:
-		_switch_weapon("sniper")
-	elif (pressed & BTN_SLOT4) != 0:
-		_switch_weapon("mg")
+		switch_slot(1)
+	elif (pressed & BTN_PREV) != 0:
+		switch_slot(posmod(slot - 1, loadout.size()))
+	elif (pressed & BTN_NEXT) != 0:
+		switch_slot(posmod(slot + 1, loadout.size()))
+	ads = (inp_buttons & BTN_ADS) != 0 and switch_t <= 0.0
 	var w := Weapons.get_data(weapon_id)
 	if reload_t > 0.0 or switch_t > 0.0:
 		return
@@ -809,8 +904,7 @@ func _die(killer_id: int, cause: String) -> void:
 func respawn(pos: Vector3, yaw_: float, protect: float) -> void:
 	hp = MAX_HP
 	alive = true
-	weapon_id = "rifle"
-	_reset_ammo()
+	_reset_ammo()   # keeps the loadout, refills both weapons, equips slot 1
 	_update_viewmodel()
 	reload_t = 0.0
 	switch_t = 0.0
@@ -880,7 +974,8 @@ func pack_state() -> Array:
 	if ads:
 		f |= F_ADS
 	flags = f
-	return [id, global_position, yaw, pitch, hp, ammo, f, reload_t, dash_cd, echo_cd, stagger_t, spawn_protect_t, velocity, Weapons.ORDER.find(weapon_id), reserve]
+	return [id, global_position, yaw, pitch, hp, ammo, f, reload_t, dash_cd, echo_cd, stagger_t, spawn_protect_t, velocity, Weapons.ORDER.find(weapon_id), reserve,
+		Weapons.ORDER.find(str(loadout[0])), Weapons.ORDER.find(str(loadout[1])), int(ammo_of(str(loadout[1 - slot]))["mag"]), int(ammo_of(str(loadout[1 - slot]))["reserve"])]
 
 
 func apply_state(s: Array) -> void:
@@ -910,10 +1005,23 @@ func apply_state(s: Array) -> void:
 	ads = (flags & F_ADS) != 0
 	if s.size() > 14:
 		var wid: String = Weapons.ORDER[clampi(int(s[13]), 0, Weapons.ORDER.size() - 1)]
+		if s.size() > 18:
+			var l0: String = Weapons.ORDER[clampi(int(s[15]), 0, Weapons.ORDER.size() - 1)]
+			var l1: String = Weapons.ORDER[clampi(int(s[16]), 0, Weapons.ORDER.size() - 1)]
+			if str(loadout[0]) != l0 or str(loadout[1]) != l1:
+				loadout = [l0, l1]
+				for lw in loadout:
+					_ensure_viewmodel(lw)
+				if Game.args.has("log-snap"):
+					Game.log_ev("Armory", "loadout_seen", {"id": id, "loadout": loadout})
 		if wid != weapon_id:
 			weapon_id = wid
+			_ensure_viewmodel(wid)
 			_update_viewmodel()
+		slot = maxi(0, loadout.find(weapon_id))
 		reserve = int(s[14])
+		if s.size() > 18:
+			ammo_state[str(loadout[1 - slot])] = {"mag": int(s[17]), "reserve": int(s[18])}
 	if (old_flags & F_ALIVE) != (flags & F_ALIVE):
 		_apply_flags_visual()
 	if _net_prev.distance_to(_net_pos) > 6.0:

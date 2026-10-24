@@ -4,7 +4,10 @@ extends RefCounted
 ## Patterns are authored here (not copied from any existing game): rifle climbs then drifts in a slow S,
 ## shotgun kicks once hard, sniper kicks up and settles, machine gun climbs steadily with a bounded wander.
 
-const ORDER := ["rifle", "shotgun", "sniper", "mg"]
+## Index order is part of the snapshot format (new weapons are appended).
+const ORDER := ["rifle", "shotgun", "sniper", "mg", "deagle"]
+## Weapons offered in the armory (the machine gun stays in DATA for scripted/test use only).
+const ARMORY := ["deagle", "rifle", "shotgun", "sniper"]
 
 const DATA := {
 	"rifle": {
@@ -31,6 +34,15 @@ const DATA := {
 		"spread_grow": 0.0012, "ads_fov": 64.0, "ads_spread": 0.65, "range": 120.0, "falloff": 0.6, "move_mult": 0.85,
 		"switch": 0.8, "recover": 4.0, "color": "F1E8D8",
 	},
+	# Desert Eagle: semi-auto hand cannon. Three body shots to kill, tight cone that opens quickly under
+	# rapid fire, strong vertical kick, short magazine and the slowest reload of the sidearm class.
+	"deagle": {
+		"name": "DESERT EAGLE", "slot": 5, "mag": 7, "reserve": 28, "damage": 46.0, "rof": 0.3, "velocity": 480.0,
+		"reload": 2.3, "auto": false, "pellets": 1, "spread": 0.0025, "spread_move": 0.02, "spread_jump": 0.06,
+		"spread_grow": 0.004, "ads_fov": 62.0, "ads_spread": 0.5, "range": 60.0, "falloff": 0.5, "move_mult": 1.0,
+		"switch": 0.35, "recover": 3.5, "color": "FFB454",
+		"hint": "Powerful, accurate sidearm",
+	},
 }
 
 
@@ -50,6 +62,8 @@ static func recoil(id: String, n: int) -> Vector2:
 			return Vector2(0.012 * (1.0 if n % 2 == 0 else -1.0), 0.06)
 		"sniper":
 			return Vector2(0.004, 0.07)
+		"deagle":
+			return Vector2(0.006 * (1.0 if n % 2 == 0 else -1.0), 0.048)
 		"mg":
 			var climb := 0.011 + minf(0.016, float(n) * 0.0006)
 			var wander := 0.013 * sin(float(n) * 0.35) + 0.006 * sin(float(n) * 1.7)

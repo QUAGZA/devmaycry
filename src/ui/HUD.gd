@@ -14,6 +14,9 @@ var hp_bar_bg: Control
 var ammo_lbl: Label
 var reserve_lbl: Label
 var ammo_state_lbl: Label
+var other_lbl: Label
+var armory: Armory
+var _last_weapon := ""
 var dash_card: Dictionary
 var echo_card: Dictionary
 var feed_box: VBoxContainer
@@ -60,6 +63,9 @@ func _ready() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
 	_build()
+	armory = Armory.new()
+	armory.name = "Armory"
+	add_child(armory)
 	Game.notice.connect(_on_notice)
 	Game.kill_feed.connect(_on_kill)
 	Game.damage_fx.connect(_on_damage)
@@ -215,7 +221,7 @@ func _build() -> void:
 	br.add_child(echo_card["root"])
 	var ammo_card := PanelContainer.new()
 	ammo_card.add_theme_stylebox_override("panel", UiTheme.card(Color(Palette.INK, 0.72), Color(Palette.STONE, 0.6), 1, 2, 12))
-	ammo_card.custom_minimum_size = Vector2(210, 84)
+	ammo_card.custom_minimum_size = Vector2(250, 110)
 	br.add_child(ammo_card)
 	var ammo_box := VBoxContainer.new()
 	ammo_box.alignment = BoxContainer.ALIGNMENT_END
@@ -233,6 +239,9 @@ func _build() -> void:
 	reserve_lbl = UiTheme.label("/ 090", 20, Color(Palette.PORCELAIN, 0.6), mono)
 	reserve_lbl.size_flags_vertical = Control.SIZE_SHRINK_END
 	ammo_row.add_child(reserve_lbl)
+	other_lbl = UiTheme.stamp("[2]  DESERT EAGLE   07 / 028", UiTheme.AMBER, 13)
+	other_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	ammo_box.add_child(other_lbl)
 
 	# Centre: crosshair, notices, interaction progress
 	crosshair = Control.new()
@@ -417,7 +426,7 @@ func _on_notice(text: String, seconds: float) -> void:
 func _on_kill(killer_name: String, victim_name: String, cause: String, killer_id: int, victim_id: int) -> void:
 	var l := UiTheme.label("", 15, Palette.PORCELAIN, UiTheme.mono_font())
 	var verb := "LOST"
-	if cause in ["pulse", "rifle", "shotgun", "sniper", "mg"]:
+	if cause in ["pulse", "rifle", "shotgun", "sniper", "mg", "deagle"]:
 		verb = "ERASED"
 	elif cause == "echo":
 		verb = "ECHOED"
@@ -589,8 +598,9 @@ func _process(delta: float) -> void:
 	timer_lbl.text = "%02d:%02d" % [int(tl) / 60, int(tl) % 60]
 	var warn := tl <= 10.0 and tl > 0.0
 	timer_lbl.add_theme_color_override("font_color", Palette.VERMILION if warn else Palette.INK)
-	if p != null and is_instance_valid(p) and p.ads != _last_ads:
+	if p != null and is_instance_valid(p) and (p.ads != _last_ads or p.weapon_id != _last_weapon):
 		_last_ads = p.ads
+		_last_weapon = p.weapon_id
 		crosshair.queue_redraw()
 	if p != null and is_instance_valid(p):
 		hp_lbl.text = "%03d" % int(ceil(p.hp))
@@ -598,7 +608,10 @@ func _process(delta: float) -> void:
 		hp_bar.color = Palette.MINT if p.hp > 50 else (Palette.BRASS if p.hp > 25 else Palette.VERMILION)
 		ammo_lbl.text = "%02d" % p.ammo
 		reserve_lbl.text = "/ %03d" % p.reserve
-		var wname := str(Weapons.get_data(p.weapon_id)["name"])
+		var wname := "[%d]  %s" % [p.slot + 1, str(Weapons.get_data(p.weapon_id)["name"])]
+		var oid := str(p.loadout[1 - p.slot])
+		var oam := p.ammo_of(oid)
+		other_lbl.text = "[%d]  %s   %02d / %03d" % [2 - p.slot, str(Weapons.get_data(oid)["name"]), int(oam["mag"]), int(oam["reserve"])]
 		if p.reload_t > 0.0:
 			ammo_state_lbl.text = "%s / RELOADING %0.1f" % [wname, p.reload_t]
 			ammo_state_lbl.add_theme_color_override("font_color", Palette.BRASS)
@@ -606,7 +619,7 @@ func _process(delta: float) -> void:
 			ammo_state_lbl.text = "%s / EMPTY / PRESS R" % wname if p.reserve > 0 else "%s / NO AMMO" % wname
 			ammo_state_lbl.add_theme_color_override("font_color", Palette.VERMILION)
 		else:
-			ammo_state_lbl.text = "%s / %d" % [wname, int(Weapons.get_data(p.weapon_id)["slot"])]
+			ammo_state_lbl.text = wname
 			ammo_state_lbl.add_theme_color_override("font_color", Palette.MINT)
 		_update_card(dash_card, p.dash_cd, Player.DASH_COOLDOWN)
 		if Game.mode_id == "hot_return":

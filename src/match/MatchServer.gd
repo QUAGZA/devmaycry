@@ -235,6 +235,8 @@ func clear_echoes(reason: String) -> void:
 
 
 func live_dict() -> Dictionary:
+	if Game.armory != null and Game.armory.active:
+		return {}   # the mode's rules have not begun yet (armory phase)
 	if rules != null and rules.has_method("live_dict"):
 		return rules.live_dict()
 	return {}

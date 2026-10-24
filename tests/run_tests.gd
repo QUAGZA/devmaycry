@@ -154,6 +154,14 @@ func _test_weapons() -> void:
 	check(W.damage_at("rifle", 10.0) == 24.0 and W.damage_at("rifle", 280.0) < 24.0, "rifle damage falls off beyond its range")
 	check(int(W.get_data("shotgun")["pellets"]) == 8 and int(W.get_data("mg")["mag"]) == 100 and int(W.get_data("sniper")["mag"]) == 5, "weapon classes carry distinct magazine and pellet definitions")
 	check(W.recoil("rifle", 10).x != 0.0 and W.recoil("mg", 10).x != W.recoil("rifle", 10).x, "patterns differ between weapons")
+	var D: Dictionary = W.get_data("deagle")
+	check(int(D["mag"]) >= 7 and int(D["mag"]) <= 8 and not bool(D["auto"]) and float(D["damage"]) > 1.5 * float(W.get_data("rifle")["damage"]), "Desert Eagle is semi-auto, 7-8 rounds and hits harder than the rifle")
+	check(float(D["spread"]) < float(W.get_data("rifle")["spread"]) and float(D["reload"]) > float(W.get_data("rifle")["reload"]), "Desert Eagle is tighter than the rifle and reloads slower")
+	check(W.recoil("deagle", 3).y > W.recoil("rifle", 3).y, "Desert Eagle kicks harder than the rifle")
+	check(W.ARMORY.size() == 4 and not W.ARMORY.has("mg") and W.ORDER.has("deagle"), "armory offers four weapons, not the machine gun")
+	var L = load("res://src/weapons/Loadout.gd")
+	check(L.is_valid(["rifle", "deagle"]) and not L.is_valid(["rifle", "rifle"]) and not L.is_valid(["rifle", "mg"]) and not L.is_valid(["rifle"]), "loadouts need two distinct offered weapons")
+	check(L.sanitize(["sniper", "sniper"]) == L.DEFAULT and L.sanitize(["sniper", "shotgun"]) == ["sniper", "shotgun"], "invalid loadouts fall back to the default")
 
 
 func _test_relic_rules() -> void:

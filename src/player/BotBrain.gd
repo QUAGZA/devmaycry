@@ -46,6 +46,7 @@ var last_hp := 100.0
 var hurt_t := 0.0
 var rng := RandomNumberGenerator.new()
 var want_ability := false
+var weapon_swap_t := 0.0
 
 
 func _init(player: Player, diff: String) -> void:
@@ -55,6 +56,31 @@ func _init(player: Player, diff: String) -> void:
 	rng.randomize()
 	aim_yaw = p.yaw
 	stuck_pos = p.global_position
+
+
+## Slot (0/1) whose weapon suits the range: expected damage per second at this distance, with a bonus for
+## the weapon in hand (no flip-flopping), a long-range bonus for scoped weapons, and no empty weapons.
+func _best_slot(dist: float) -> int:
+	var best := p.slot
+	var best_score := -1e9
+	for i in p.loadout.size():
+		var wid := str(p.loadout[i])
+		var d := Weapons.get_data(wid)
+		var am := p.ammo_of(wid)
+		if int(am["mag"]) + int(am["reserve"]) <= 0:
+			continue
+		var acc := clampf(1.25 - dist / 24.0, 0.05, 1.0) if int(d["pellets"]) > 1 else 1.0
+		var score := Weapons.damage_at(wid, dist) * float(d["pellets"]) * acc / maxf(float(d["rof"]), float(prof["fire_gap"]))
+		if wid == "sniper":
+			score *= 2.4 if dist > 50.0 else (0.35 if dist < 22.0 else 1.0)
+		if int(am["mag"]) <= 0:
+			score *= 0.3
+		if i == p.slot:
+			score *= 1.25
+		if score > best_score:
+			best_score = score
+			best = i
+	return best
 
 
 func think(delta: float) -> void:
@@ -97,8 +123,16 @@ func think(delta: float) -> void:
 		aim_yaw = lerp_angle(aim_yaw, want_yaw, minf(1.0, delta * 9.0))
 		aim_pitch = lerpf(aim_pitch, want_pitch, minf(1.0, delta * 9.0))
 		fire_t -= delta
+		weapon_swap_t -= delta
+		if weapon_swap_t <= 0.0 and p.switch_t <= 0.0:
+			weapon_swap_t = 0.6
+			var want_slot := _best_slot(dist)
+			if want_slot != p.slot:
+				buttons |= Player.BTN_SLOT1 if want_slot == 0 else Player.BTN_SLOT2
+				weapon_swap_t = 1.2
 		var aligned := absf(wrapf(aim_yaw - want_yaw + err_yaw, -PI, PI)) < 0.09
-		if fire_t <= 0.0 and dist < float(prof["range"]) and aligned and p.ammo > 0 and p.reload_t <= 0.0:
+		var wrange := minf(float(prof["range"]), float(Weapons.get_data(p.weapon_id)["range"]) * 1.6)
+		if fire_t <= 0.0 and dist < wrange and aligned and p.ammo > 0 and p.reload_t <= 0.0 and p.switch_t <= 0.0 and (buttons & (Player.BTN_SLOT1 | Player.BTN_SLOT2)) == 0:
 			buttons |= Player.BTN_FIRE
 			fire_t = float(prof["fire_gap"]) * rng.randf_range(0.8, 1.3)
 		if p.ammo == 0:
@@ -128,7 +162,7 @@ func think(delta: float) -> void:
 		if move != Vector2.ZERO:
 			aim_yaw = lerp_angle(aim_yaw, path_yaw, minf(1.0, delta * 6.0))
 		aim_pitch = lerpf(aim_pitch, 0.0, minf(1.0, delta * 4.0))
-		if p.ammo < Player.MAG_SIZE and p.reload_t <= 0.0 and rng.randf() < 0.02:
+		if p.ammo < int(Weapons.get_data(p.weapon_id)["mag"]) and p.reserve > 0 and p.reload_t <= 0.0 and rng.randf() < 0.02:
 			buttons |= Player.BTN_RELOAD
 		if move != Vector2.ZERO and goal_kind in ["core", "site", "beacon", "shard", "rotate", "escort", "investigate", "chase", "stabilize"]:
 			buttons |= Player.BTN_SPRINT
