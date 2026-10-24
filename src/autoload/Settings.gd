@@ -257,7 +257,8 @@ func glow_allowed() -> bool:
 	return preset != "low"
 
 
-func apply_prefs() -> void:
+## Master and per-bus volumes (also used for live preview while a settings slider moves).
+func apply_audio() -> void:
 	var master := AudioServer.get_bus_index("Master")
 	if master >= 0:
 		AudioServer.set_bus_volume_db(master, linear_to_db(clampf(master_volume, 0.0001, 1.0)))
@@ -265,6 +266,10 @@ func apply_prefs() -> void:
 		var bi := AudioServer.get_bus_index(b)
 		if bi >= 0:
 			AudioServer.set_bus_volume_db(bi, linear_to_db(clampf(float(bus_volumes[b]), 0.0001, 1.0)))
+
+
+func apply_prefs() -> void:
+	apply_audio()
 	apply_graphics()
 	if DisplayServer.get_name() != "headless" and not cli_overrides_window():
 		call_deferred("apply_window")

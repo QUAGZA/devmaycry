@@ -11,6 +11,7 @@ var _auto_min_players := 1
 
 
 func _ready() -> void:
+	Music.menu()
 	theme = UiTheme.theme()
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	var bg := ColorRect.new()
@@ -478,10 +479,14 @@ func _screen_settings() -> void:
 	_slider("RETICLE SIZE", 0.6, 1.8, 0.1, Settings.reticle_size, func(v: float) -> void: Settings.reticle_size = v)
 	_slider("CAMERA SHAKE", 0.0, 1.0, 0.1, Settings.shake, func(v: float) -> void: Settings.shake = v)
 	_check("HEAD BOB", Settings.head_bob, func(v: bool) -> void: Settings.head_bob = v)
-	_slider("MASTER VOLUME", 0.0, 1.0, 0.05, Settings.master_volume, func(v: float) -> void: Settings.master_volume = v)
+	_slider("MASTER VOLUME", 0.0, 1.0, 0.05, Settings.master_volume, func(v: float) -> void:
+		Settings.master_volume = v
+		Settings.apply_audio())
 	for b in ["Music", "Weapons", "Effects", "Ambience", "UI"]:
 		var bus_name: String = b
-		_slider(bus_name.to_upper() + " VOLUME", 0.0, 1.0, 0.05, float(Settings.bus_volumes[bus_name]), func(v: float) -> void: Settings.bus_volumes[bus_name] = v)
+		_slider(bus_name.to_upper() + " VOLUME", 0.0, 1.0, 0.05, float(Settings.bus_volumes[bus_name]), func(v: float) -> void:
+			Settings.bus_volumes[bus_name] = v
+			Settings.apply_audio())
 	column = main_col
 	column.add_child(UiTheme.rule(Palette.STONE))
 	var row := HBoxContainer.new()
@@ -499,6 +504,7 @@ func _screen_settings() -> void:
 	revert.text = "REVERT"
 	revert.pressed.connect(func() -> void:
 		Settings.restore(snap)
+		Settings.apply_audio()
 		Settings.apply_prefs()
 		_screen_settings()
 		_set_status("Reverted to the saved settings.", Palette.BRASS))
