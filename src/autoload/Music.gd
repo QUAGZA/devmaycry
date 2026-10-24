@@ -1,7 +1,8 @@
 extends Node
 ## Main-menu music. One AudioStreamPlayer on the "Music" bus, so the existing MUSIC VOLUME slider and
 ## the master volume apply with no extra code. Lifecycle:
-##   menu()      Title screen _ready: start (or resume) with a fade-in. Idempotent, never a second instance.
+##   menu()      Title screen _ready: start (or resume) with a fade-in. Idempotent, never a second instance. After a
+##               match the track continues from where the menu left it.
 ##   fade_out()  A match is loading: fade, then stop. Calling menu() during the fade turns it around.
 ##   stop()      Immediate stop.
 ## The supplied track ends with 0.25 s of digital silence after a hard cut and opens on a full-level hit,
@@ -23,6 +24,7 @@ var _stream: AudioStream
 var _wraps := 0
 var _last_pos := 0.0
 var _enabled := true
+var _resume_pos := 0.0           # where the menu music was when a match took over; the menu picks it up from there
 
 
 func _ready() -> void:
@@ -57,9 +59,11 @@ func menu(fresh := true) -> void:
 	_player.stream = _stream
 	_fade = 0.0
 	_wraps = 0
-	_last_pos = 0.0
+	var from := clampf(_resume_pos, 0.0, maxf(0.0, LOOP_END - 5.0)) if fresh else 0.0
+	_resume_pos = 0.0
+	_last_pos = from
 	_apply_gain(1.0)
-	_player.play(0.0)
+	_player.play(from)
 	_state = "playing"
 	_ramp(1.0, FADE_IN)
 	set_process(true)
@@ -116,6 +120,7 @@ func _status() -> Dictionary:
 
 func _on_faded() -> void:
 	if _state == "fading_out":
+		_resume_pos = maxf(0.0, _player.get_playback_position() - 1.0)   # back up a second so the return does not start mid-phrase
 		stop()
 
 

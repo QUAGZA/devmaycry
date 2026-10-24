@@ -15,6 +15,8 @@ const PLAN := preload("res://src/maps/plans/foundry_plan.gd")
 const TOWER_Y := 6.0
 const TUNNEL_Y := -3.2
 
+const STYLE := {"seed": 31, "rows": [3.2, 6.4], "window": Vector2(0.8, 1.9), "pier_gap": 4.5, "lit": 0.28, "skip": 0.12,
+	"hazard_band": "hazard", "hazard_chance": 0.3, "pipe": "pipe", "pipe_chance": 0.45, "pipe_y": 4.2}
 
 func _init() -> void:
 	family = "foundry"
@@ -47,10 +49,34 @@ func _materials() -> Dictionary:
 	}
 
 
+func _facade_materials() -> Dictionary:
+	var glow := StandardMaterial3D.new()
+	glow.albedo_color = Color("FF9A4D")
+	glow.emission_enabled = true
+	glow.emission = Color("FF7A2E")
+	glow.emission_energy_multiplier = 1.6
+	var glass := StandardMaterial3D.new()
+	glass.albedo_color = Color("20262E")
+	glass.roughness = 0.3
+	glass.metallic = 0.25
+	return {
+		"plinth": Style.surface("metal", Color("2A2F38")),
+		"trim": Style.surface("concrete", Color("E8D9C0")),
+		"band": Style.surface("ceramic", Color("E2683A")),
+		"hazard": Style.surface("ceramic", Color("D99A2B")),
+		"pipe": Style.surface("metal", Color("5A5F68")),
+		"glass": glass,
+		"glass_lit": glow,
+	}
+
 func _build_layout() -> void:
 	light_env(Vector3(-0.2, -0.85, -0.45), Color("FFE2C4"), Color("B8A89C"), Color("E9D9C6"), Color("4A3A33"), Color("D7C4B2"), 0.0025)
 	var stats := PlanRunner.run(self, PLAN.OPS, PLAN.LAYOUT, PLAN.EXTENT, _materials())
 	Game.log_ev("Map", "plan_built", {"map": id, "stats": stats})
+	var fm := _materials().duplicate()
+	fm.merge(_facade_materials())
+	var fs := Facades.build(self, PLAN.OPS, PLAN.EXTENT, fm, STYLE)
+	Game.log_ev("Map", "facades", {"map": id, "stats": fs})
 	_reactor_machinery()
 	_scenery()
 	MapDecor.dress_boxes(self)

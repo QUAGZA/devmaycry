@@ -19,6 +19,7 @@ var invert_y := false
 var reticle_size := 1.0
 var shake := 1.0
 var head_bob := true
+var intro_seen := false             # the long startup sequence has been watched once; later launches get the short one
 var bus_volumes := {"Music": 0.6, "Weapons": 1.0, "Effects": 1.0, "Ambience": 0.8, "UI": 1.0}
 const PRESETS := ["low", "medium", "high"]
 const FPS_CAPS := [30, 60, 120, 144, 0]
@@ -98,6 +99,7 @@ func load_prefs() -> void:
 	sfx_volume = float(cfg.get_value("audio", "sfx", sfx_volume))
 	music_volume = float(cfg.get_value("audio", "music", music_volume))
 	player_name = str(cfg.get_value("player", "name", player_name))
+	intro_seen = bool(cfg.get_value("meta", "intro_seen", false))
 	fullscreen = bool(cfg.get_value("video", "fullscreen", fullscreen))
 	window_mode = str(cfg.get_value("video", "window_mode", "fullscreen" if fullscreen else "windowed"))
 	shadow_quality = str(cfg.get_value("video", "shadow_quality", shadow_quality))
@@ -129,6 +131,7 @@ func save_prefs() -> void:
 		return
 	var cfg := ConfigFile.new()
 	cfg.set_value("meta", "version", 2)
+	cfg.set_value("meta", "intro_seen", intro_seen)
 	cfg.set_value("input", "mouse_sensitivity", mouse_sensitivity)
 	cfg.set_value("audio", "master", master_volume)
 	cfg.set_value("audio", "sfx", sfx_volume)

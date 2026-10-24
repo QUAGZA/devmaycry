@@ -16,6 +16,62 @@ static func glow_mat(color: Color, energy: float = 2.5, alpha: float = 1.0) -> S
 	return m
 
 
+## ---------------------------------------------------------------- shared clearance helpers (zipline, gates)
+const CAPSULE_R := 0.4
+const CAPSULE_H := 1.8
+static var _cap_shape: CapsuleShape3D = null
+
+
+static func capsule() -> CapsuleShape3D:
+	if _cap_shape == null:
+		_cap_shape = CapsuleShape3D.new()
+		_cap_shape.radius = CAPSULE_R
+		_cap_shape.height = CAPSULE_H
+	return _cap_shape
+
+
+## True if the player capsule standing at `feet` would overlap static world geometry (collision layer 1).
+static func blocked(world: World3D, feet: Vector3, lift: float = 0.06) -> bool:
+	if world == null:
+		return false
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.shape = capsule()
+	q.transform = Transform3D(Basis.IDENTITY, feet + Vector3(0, CAPSULE_H * 0.5 + lift, 0))
+	q.collision_mask = 1
+	q.margin = 0.0
+	return not world.direct_space_state.intersect_shape(q, 1).is_empty()
+
+
+## Nearest standing spot to `pos` with room for the whole capsule and floor underneath (a few candidates around it).
+## Returns {"ok": bool, "pos": Vector3, "moved": float}.
+static func safe_spot(world: World3D, pos: Vector3, forward: Vector3 = Vector3.FORWARD) -> Dictionary:
+	var fwd := Vector3(forward.x, 0, forward.z).normalized() if Vector2(forward.x, forward.z).length() > 0.01 else Vector3.FORWARD
+	var side := Vector3(-fwd.z, 0, fwd.x)
+	var offsets: Array = [Vector3.ZERO, fwd * 0.6, -fwd * 0.6, side * 0.7, -side * 0.7, fwd * 1.2, -fwd * 1.2, side * 1.4, -side * 1.4,
+		fwd * 0.8 + side * 0.8, fwd * 0.8 - side * 0.8, -fwd * 0.8 + side * 0.8, -fwd * 0.8 - side * 0.8, fwd * 2.0, -fwd * 2.0]
+	var space := world.direct_space_state
+	for o in offsets:
+		for up in [0.0, 0.3, 0.6]:
+			var cand: Vector3 = pos + (o as Vector3) + Vector3(0, up, 0)
+			var ray := PhysicsRayQueryParameters3D.create(cand + Vector3(0, 0.7, 0), cand + Vector3(0, -1.6, 0), 1)
+			var hit := space.intersect_ray(ray)
+			if hit.is_empty():
+				continue
+			var feet: Vector3 = hit["position"]
+			if not blocked(world, feet):
+				return {"ok": true, "pos": feet, "moved": feet.distance_to(pos)}
+	return {"ok": false, "pos": pos, "moved": 0.0}
+
+
+## Hint shown to the local player while within `radius` (horizontal) of `at`.
+static func near_local(at: Vector3, radius: float, height: float = 3.0) -> bool:
+	var lp = Game.local_player
+	if lp == null or not is_instance_valid(lp) or not lp.alive:
+		return false
+	var d := Vector2(lp.global_position.x - at.x, lp.global_position.z - at.z).length()
+	return d <= radius and absf(lp.global_position.y - at.y) <= height
+
+
 static func label(text: String, pos: Vector3, color: Color, size: int = 60) -> Label3D:
 	var l := Label3D.new()
 	l.text = text
@@ -110,6 +166,21 @@ class PhaseGate extends Area3D:
 		add_child(floor_mark)
 		add_child(Features.label("PHASE GATE %s" % gname, Vector3(0, 5.0, 0), Palette.MINT, 56))
 
+	func validate() -> Dictionary:
+		var fwd := Basis(Vector3.UP, exit_yaw) * Vector3.FORWARD
+		var spot := Features.safe_spot(get_world_3d(), exit_pos, fwd)
+		var here_blocked := Features.blocked(get_world_3d(), global_position)
+		return {"kind": "gate", "name": gate_name, "pos": [snappedf(global_position.x, 0.1), snappedf(global_position.y, 0.1), snappedf(global_position.z, 0.1)],
+			"ok": bool(spot["ok"]) and not here_blocked, "exit_ok": bool(spot["ok"]), "exit_moved": snappedf(float(spot["moved"]), 0.01), "entry_blocked": here_blocked}
+
+	func _process(_delta: float) -> void:
+		if Features.near_local(global_position, 3.4):
+			var lp = Game.local_player
+			if lp.carrying_core:
+				Game.set_prompt("PHASE GATES REFUSE THE CAUSAL CORE")
+			else:
+				Game.set_prompt("STAND IN THE GATE TO PHASE")
+
 	func _physics_process(delta: float) -> void:
 		ring.rotation.z += delta * 0.6
 		if not multiplayer.is_server():
@@ -140,10 +211,19 @@ class PhaseGate extends Area3D:
 			var need := ACTIVATION
 			if progress[p.id] >= need:
 				progress.erase(p.id)
+				# the exit must have room for the whole capsule: nudge to the nearest clear standing spot or stay put
+				var fwd := Basis(Vector3.UP, exit_yaw) * Vector3.FORWARD
+				var spot := Features.safe_spot(get_world_3d(), exit_pos, fwd)
+				if not bool(spot["ok"]):
+					lockout[p.id] = LOCKOUT
+					Game.log_ev("Feature", "gate_exit_blocked", {"id": p.id, "gate": gate_name})
+					if p.id > 0:
+						Game.rpc_notice.rpc_id(p.id, "GATE EXIT BLOCKED", 1.4)
+					continue
 				lockout[p.id] = LOCKOUT
 				Game.rpc_fx.rpc("teleport", p.id, p.global_position)
-				Game.rpc_teleport.rpc(p.id, exit_pos, exit_yaw)
-				Game.log_ev("Feature", "gate", {"id": p.id, "gate": gate_name})
+				Game.rpc_teleport.rpc(p.id, spot["pos"], exit_yaw)
+				Game.log_ev("Feature", "gate", {"id": p.id, "gate": gate_name, "moved": snappedf(float(spot["moved"]), 0.01)})
 		for id in progress.keys():
 			if not inside.has(id):
 				progress.erase(id)
@@ -154,6 +234,8 @@ class PhaseGate extends Area3D:
 class Zipline extends Node3D:
 	const SPEED := 14.0
 	const LOCKOUT := 1.5
+	const ATTACH_TIME := 0.2
+	const RIDE_LIFT := 0.3
 	var a := Vector3.ZERO
 	var b := Vector3.ZERO
 	var zip_name := ""
@@ -161,6 +243,7 @@ class Zipline extends Node3D:
 	var riders: Dictionary = {}
 	var lockout: Dictionary = {}
 	var refused: Dictionary = {}
+	var disabled_reason := ""
 
 	func setup(from: Vector3, to: Vector3, zname: String) -> void:
 		a = from
@@ -190,10 +273,10 @@ class Zipline extends Node3D:
 			ar.position = end
 			var cs := CollisionShape3D.new()
 			var sh := CylinderShape3D.new()
-			sh.radius = 1.8
-			sh.height = 3.0
+			sh.radius = 2.2
+			sh.height = 3.4
 			cs.shape = sh
-			cs.position = Vector3(0, 1.5, 0)
+			cs.position = Vector3(0, 1.7, 0)
 			ar.add_child(cs)
 			var post := MeshInstance3D.new()
 			var pm := CylinderMesh.new()
@@ -223,6 +306,46 @@ class Zipline extends Node3D:
 			add_child(ar)
 			anchors.append(ar)
 
+	## Sweep the player capsule along the whole cable (and check both anchors) against static geometry.
+	func validate() -> Dictionary:
+		var w := get_world_3d()
+		var length := a.distance_to(b)
+		var steps := maxi(2, int(ceil(length / 0.4)))
+		var first_hit := -1.0
+		for i in steps + 1:
+			var k := float(i) / float(steps)
+			var feet := a.lerp(b, k) + Vector3(0, RIDE_LIFT, 0)
+			if Features.blocked(w, feet, 0.08):
+				first_hit = k * length
+				break
+		var start_ok := not Features.blocked(w, a + Vector3(0, 0.05, 0))
+		var end_spot := Features.safe_spot(w, b, (b - a).normalized())
+		var ok := first_hit < 0.0 and start_ok and bool(end_spot["ok"])
+		return {"kind": "zip", "name": zip_name, "length": snappedf(length, 0.1), "ok": ok, "blocked_at_m": snappedf(first_hit, 0.1) if first_hit >= 0.0 else -1.0,
+			"start_ok": start_ok, "end_ok": bool(end_spot["ok"]), "end_moved": snappedf(float(end_spot["moved"]), 0.01)}
+
+	func _ready() -> void:
+		# validated once the physics bodies of the map exist; an unsafe cable is switched off instead of ridden
+		if multiplayer.is_server():
+			await get_tree().physics_frame
+			await get_tree().physics_frame
+			var r := validate()
+			Game.log_ev("Feature", "zip_validated", r)
+			if not bool(r["ok"]):
+				disabled_reason = "BLOCKED"
+				push_warning("Zipline %s is obstructed and has been disabled: %s" % [zip_name, str(r)])
+
+	func _process(_delta: float) -> void:
+		for ar in anchors:
+			if Features.near_local((ar as Area3D).global_position, 2.6):
+				var lp = Game.local_player
+				if disabled_reason != "":
+					Game.set_prompt("ZIPLINE OFFLINE")
+				elif lp.carrying_core:
+					Game.set_prompt("THE CAUSAL CORE CANNOT RIDE A ZIPLINE")
+				else:
+					Game.set_prompt("HOLD E  /  RIDE THE ZIPLINE")
+
 	func _physics_process(delta: float) -> void:
 		if not multiplayer.is_server():
 			return
@@ -236,7 +359,9 @@ class Zipline extends Node3D:
 				refused.erase(id)
 		for i in anchors.size():
 			for p in Features.players_in(anchors[i]):
-				if riders.has(p.id) or lockout.has(p.id) or not p.interact_held or p.zip_t > 0.0:
+				if riders.has(p.id) or lockout.has(p.id) or not (p.interact_held or p.interact_buffer_t > 0.0) or p.zip_t > 0.0:
+					continue
+				if disabled_reason != "":
 					continue
 				if p.carrying_core:
 					# cables are shortcuts over the carry route: the Core is too volatile to hang from one
@@ -249,9 +374,10 @@ class Zipline extends Node3D:
 				var start: Vector3 = a if i == 0 else b
 				var goal: Vector3 = b if i == 0 else a
 				var dur := start.distance_to(goal) / SPEED
-				riders[p.id] = {"t": 0.0, "dur": dur, "from": start, "to": goal}
-				p.zip_t = dur + 0.05
+				riders[p.id] = {"t": 0.0, "dur": dur, "from": start, "to": goal, "p0": p.global_position, "last": p.global_position}
+				p.zip_t = dur + ATTACH_TIME + 0.05
 				p.velocity = Vector3.ZERO
+				p.interact_buffer_t = 0.0
 				Game.rpc_fx.rpc("zip", p.id, p.global_position)
 				Game.log_ev("Feature", "zip_attach", {"id": p.id, "zip": zip_name, "dur": snappedf(dur, 0.1)})
 		for id in riders.keys():
@@ -263,17 +389,41 @@ class Zipline extends Node3D:
 					p.zip_t = 0.0
 				continue
 			r["t"] += delta
-			var k: float = clampf(r["t"] / r["dur"], 0.0, 1.0)
-			var pos: Vector3 = r["from"].lerp(r["to"], k) + Vector3(0, 0.3, 0)
+			var from: Vector3 = r["from"]
+			var to: Vector3 = r["to"]
+			var line_start := from + Vector3(0, RIDE_LIFT, 0)
+			var pos: Vector3
+			var done := false
+			if r["t"] < ATTACH_TIME:
+				# short blend from wherever the rider stood onto the cable: no pop, no pull through walls
+				pos = (r["p0"] as Vector3).lerp(line_start, clampf(r["t"] / ATTACH_TIME, 0.0, 1.0))
+			else:
+				var k: float = clampf((r["t"] - ATTACH_TIME) / r["dur"], 0.0, 1.0)
+				pos = from.lerp(to, k) + Vector3(0, RIDE_LIFT, 0)
+				done = k >= 1.0
+			var dir: Vector3 = (to - from).normalized()
+			if Features.blocked(get_world_3d(), pos, 0.08):
+				# something solid is on the line (a prop moved, a bad route): stop at the last free point and drop
+				var last: Vector3 = r["last"]
+				var spot := Features.safe_spot(get_world_3d(), last, dir)
+				p.global_position = spot["pos"] if bool(spot["ok"]) else last
+				p.velocity = Vector3.ZERO
+				p.zip_t = 0.0
+				riders.erase(id)
+				lockout[id] = LOCKOUT
+				Game.log_ev("Feature", "zip_blocked", {"id": id, "zip": zip_name})
+				continue
+			r["last"] = pos
 			p.global_position = pos
-			var dir: Vector3 = (r["to"] - r["from"]).normalized()
 			p.yaw = atan2(-dir.x, -dir.z)
-			if k >= 1.0:
+			if done:
+				var spot2 := Features.safe_spot(get_world_3d(), to, dir)
+				p.global_position = spot2["pos"] if bool(spot2["ok"]) else pos
 				riders.erase(id)
 				p.zip_t = 0.0
-				p.velocity = dir * 4.0
+				p.velocity = dir * 3.0
 				lockout[id] = LOCKOUT
-				Game.log_ev("Feature", "zip_detach", {"id": id, "zip": zip_name})
+				Game.log_ev("Feature", "zip_detach", {"id": id, "zip": zip_name, "moved": snappedf(float(spot2["moved"]), 0.01)})
 
 	func drop_all() -> void:
 		for id in riders.keys():
@@ -469,8 +619,11 @@ class Ladder extends Area3D:
 		if not multiplayer.is_server():
 			return
 		for p in Features.players_in(self):
+			if p.ladder_ignore_t > 0.0:
+				continue
 			if p.ladder_t <= 0.0:
 				Game.log_ev("Feature", "ladder_enter", {"id": p.id, "y": snappedf(p.global_position.y, 0.1), "top": top_y})
 			p.ladder_t = 0.15
 			p.ladder_out = out
 			p.ladder_top = top_y
+			p.ladder_base_y = base.y

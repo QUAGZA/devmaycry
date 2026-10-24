@@ -325,6 +325,120 @@ class Plan:
             self.ops.append({"op": "block", "r": r, "h": r1(hh), "mat": mat, "y0": 0.0, "derived": True, "fill": True})
         return len(out)
 
+    def fill_slivers(self, h=(7.0, 11.0), mats=("wall_a", "wall_b", "wall_c"), min_len=2.5, max_width=1.8):
+        """Thin unintended gaps (a 1 m slit between a terrace face and the building fill, a seam beside a street) are
+        narrower than the navmesh agent but wide enough for a player capsule. Find elongated free slivers sandwiched
+        between big solids and fill them, so no hidden channel, sight slit or hiding hole exists."""
+        self.ops = [o for o in self.ops if not o.get("sliver")]
+        self.build()
+        inside = self._outline_mask()
+        tall = np.zeros_like(inside)
+        big = np.zeros_like(inside)
+        for o in self.ops:
+            t = o["op"]
+            if t == "block" and o.get("y0", 0.0) <= 0.6 and o["h"] >= 5.0:
+                big |= self.rect_mask(*o["r"])
+            elif t == "poly_block" and o.get("y0", 0.0) <= 0.6 and o["h"] >= 5.0:
+                big |= self.poly_mask(o["poly"])
+            elif t == "slab" and o.get("solid") and o["top"] >= 2.5:
+                big |= self.poly_mask(o["poly"])
+            elif t == "wall" and o["h"] >= 5.0 and o.get("y0", 0.0) <= 0.6:
+                big |= self.seg_mask(o["a"], o["b"], o["t"])
+        for m, y0, y1 in self.blockers:
+            if y0 <= 0.6 and y1 >= 3.0:
+                tall |= m
+        holes = np.zeros_like(inside)
+        for o in self.ops:
+            if o["op"] == "sunken":
+                holes |= self.rect_mask(*o["r"])
+        free = inside & ~tall & ~holes
+        r = 1.6
+        disk = [(dz, dx) for dz in range(-2, 3) for dx in range(-2, 3) if math.hypot(dz, dx) <= r + 1e-6]
+        er = free.copy()
+        for dz, dx in disk:
+            er &= np.roll(np.roll(free, dz, axis=0), dx, axis=1)
+        op = np.zeros_like(free)
+        for dz, dx in disk:
+            op |= np.roll(np.roll(er, dz, axis=0), dx, axis=1)
+        thin = free & ~op
+        seen = np.zeros_like(thin)
+        n_added = 0
+        outside = ~inside
+        H, W = thin.shape
+        for z0 in range(H):
+            for x0 in range(W):
+                if not thin[z0, x0] or seen[z0, x0]:
+                    continue
+                comp = []
+                stack = [(z0, x0)]
+                seen[z0, x0] = True
+                while stack:
+                    z, x = stack.pop()
+                    comp.append((z, x))
+                    for dz in (-1, 0, 1):
+                        for dx in (-1, 0, 1):
+                            z2, x2 = z + dz, x + dx
+                            if 0 <= z2 < H and 0 <= x2 < W and thin[z2, x2] and not seen[z2, x2]:
+                                seen[z2, x2] = True
+                                stack.append((z2, x2))
+                zs = [c[0] for c in comp]
+                xs = [c[1] for c in comp]
+                length = max(max(zs) - min(zs), max(xs) - min(xs)) * RES + RES
+                width = min(max(zs) - min(zs), max(xs) - min(xs)) * RES + RES
+                if length < min_len or width > max_width:
+                    continue
+                cm = np.zeros_like(thin)
+                for z, x in comp:
+                    cm[z, x] = True
+                ring = np.zeros_like(thin)
+                for dz in (-1, 0, 1):
+                    for dx in (-1, 0, 1):
+                        ring |= np.roll(np.roll(cm, dz, axis=0), dx, axis=1)
+                ring &= ~cm
+                if ring.sum() == 0:
+                    continue
+                frac = float((ring & (big | outside)).sum()) / float(ring.sum())
+                if frac < 0.7:
+                    continue
+                # decompose the sliver into rectangles on the raster grid and add them as building mass
+                used = set()
+                cells = set(comp)
+                for z, x in sorted(comp):
+                    if (z, x) in used:
+                        continue
+                    x_end = x
+                    while (z, x_end + 1) in cells and (z, x_end + 1) not in used:
+                        x_end += 1
+                    z_end = z
+                    ok = True
+                    while ok:
+                        for xx in range(x, x_end + 1):
+                            if (z_end + 1, xx) not in cells or (z_end + 1, xx) in used:
+                                ok = False
+                                break
+                        if ok:
+                            z_end += 1
+                    for zz in range(z, z_end + 1):
+                        for xx in range(x, x_end + 1):
+                            used.add((zz, xx))
+                    rx0 = -self.ex + x * RES
+                    rz0 = -self.ez + z * RES
+                    rx1 = -self.ex + (x_end + 1) * RES
+                    rz1 = -self.ez + (z_end + 1) * RES
+                    hh = self.rng.uniform(*h)
+                    # the raster marks 0.5 m beyond every reserved edge as reserved, so a measured sliver is up to 1 m
+                    # narrower than the real slit: grow the thin axis to meet the solids on both sides
+                    if (rx1 - rx0) >= (rz1 - rz0):
+                        rz0 -= 0.5
+                        rz1 += 0.5
+                    else:
+                        rx0 -= 0.5
+                        rx1 += 0.5
+                    mat = mats[int(abs(math.floor((rx0 + rx1) / 14.0) * 31 + math.floor((rz0 + rz1) / 14.0) * 17)) % len(mats)]
+                    self.ops.append({"op": "block", "r": [r1(rx0), r1(rz0), r1(rx1), r1(rz1)], "h": r1(hh), "mat": mat, "y0": 0.0, "derived": True, "fill": True, "sliver": True})
+                    n_added += 1
+        return n_added
+
     # ------------------------------------------------------------ rasterised model
     def build(self):
         om = self._outline_mask()
@@ -409,6 +523,17 @@ class Plan:
             for dx in range(-rc, rc + 1):
                 if math.hypot(dx, dz) * RES <= AGENT_R + 1e-6:
                     disk.append((dz, dx))
+        # the navmesh erodes every walkable surface by the agent radius from its open edges (ledges, cliff walls)
+        self.surface = {}
+        for y in self.layer_y:
+            self.surface[y] = self.region[y].copy()
+            if y != 0.0:
+                outside = ~self.region[y]
+                infl_o = outside.copy()
+                for dz, dx in disk:
+                    if dz or dx:
+                        infl_o |= np.roll(np.roll(outside, dz, axis=0), dx, axis=1)
+                self.region[y] = self.region[y] & ~infl_o
         for y in self.layer_y:
             blk = np.zeros_like(self.outline_m)
             for m, y0, y1 in blockers:
@@ -428,9 +553,9 @@ class Plan:
             if y == 0.0:
                 sb |= ~self.outline_m
             elif y < 0.0:
-                sb |= ~self.region[y]          # sunken: the surrounding ground is above eye level
+                sb |= ~self.surface[y]         # sunken: the surrounding ground is above eye level
             else:
-                sb |= ~(self.region[y] | self.outline_m)
+                sb |= ~(self.surface[y] | self.outline_m)
             self.sight[y] = sb
         # connections between layers
         self.links = []
@@ -539,6 +664,73 @@ class Plan:
             total += d
             poly += p
         return total, poly
+
+    def reach_report(self, start_xz, carrier=False):
+        """Flood fill from a start point over every layer (stairs, plus ladders unless carrier). Returns the gameplay
+        points and ladder tops whose own cell is NOT reached - the engine navmesh must be able to reach them too."""
+        sx, sz = start_xz
+        la = self._layer_of(self.ground_y(sx, sz))
+        s0 = self._nearest_walk(la, sx, sz)
+        start = (la, s0[0], s0[1])
+        extra = {}
+        for kind, lo, hi, o in self.links:
+            if hi is None or (kind == "ladder" and carrier):
+                continue
+            l0, l1 = self._layer_of(lo[1]), self._layer_of(hi[1])
+            c0 = self._nearest_walk(l0, lo[0], lo[2], 3.0)
+            c1 = self._nearest_walk(l1, hi[0], hi[2], 3.0)
+            if c0 is None or c1 is None:
+                continue
+            extra.setdefault((l0, c0[0], c0[1]), []).append((l1, c1[0], c1[1]))
+            extra.setdefault((l1, c1[0], c1[1]), []).append((l0, c0[0], c0[1]))
+        seen = {start}
+        stack = [start]
+        nbrs = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
+        while stack:
+            ly, iz, ix = stack.pop()
+            w = self.walk[ly]
+            for dz, dx in nbrs:
+                z2, x2 = iz + dz, ix + dx
+                if 0 <= z2 < self.H and 0 <= x2 < self.W and w[z2, x2]:
+                    if dz and dx and not (w[iz + dz, ix] and w[iz, ix + dx]):
+                        continue
+                    nn = (ly, z2, x2)
+                    if nn not in seen:
+                        seen.add(nn)
+                        stack.append(nn)
+            for nn in extra.get((ly, iz, ix), ()):
+                if nn not in seen:
+                    seen.add(nn)
+                    stack.append(nn)
+        pts = []
+        L = self.layout
+        for k in ("vault1", "vault2", "stab1", "stab2"):
+            if k in L:
+                pts.append((k, L[k]))
+        for key in ("fields", "shards", "beacons"):
+            for i, f in enumerate(L.get(key, [])):
+                pts.append(("%s%d" % (key, i), f))
+        for i, f in enumerate(L.get("ffa", [])):
+            pts.append(("ffa%d" % i, [f[0], self.ground_y(f[0], f[1]), f[1]]))
+        for o in self.ops:
+            if o["op"] == "spawn":
+                pts.append(("spawn_t%d" % o["team"], [o["p"][0], self.ground_y(o["p"][0], o["p"][1]), o["p"][1]]))
+            if o["op"] == "ladder":
+                b, out = o["base"], o["out"]
+                pts.append(("ladder_top_" + o["name"], [b[0] - out[0] * 1.4, o["top"], b[2] - out[1] * 1.4]))
+        lost = []
+        for name, p in pts:
+            ly = self._layer_of(p[1] if not name.startswith(("shards", "beacons")) else p[1] - 0.5)
+            iz, ix = self._cell(p[0], p[2])
+            ok = False
+            reach = 2 if name.startswith("ladder_top") else 1       # the engine snaps link ends to the navmesh within ~1 m
+            for dz in range(-reach, reach + 1):
+                for dx in range(-reach, reach + 1):
+                    if (ly, iz + dz, ix + dx) in seen:
+                        ok = True
+            if not ok:
+                lost.append((name, [round(p[0], 1), round(p[1], 1), round(p[2], 1)]))
+        return lost
 
     def _dijkstra(self, a, b, carrier):
         la, lb = self._layer_of(a[1]), self._layer_of(b[1])
@@ -846,6 +1038,81 @@ class Plan:
             d.line([P(-self.ex, gz), P(self.ex, gz)], fill=(255, 255, 255, 28))
         img.save(path)
 
+    # ------------------------------------------------------------ menu preview
+    def render_preview(self, path, w=960):
+        """Clean top-down card for the setup screen in the menu palette (graphite streets, darker masses, teal and
+        amber markers). Authored geometry only: no analysis overlays."""
+        s = w / (2 * self.ex)
+        h = int(2 * self.ez * s)
+        GRAPHITE, SURFACE, STREET, MASS, EDGE = (16, 20, 25), (27, 35, 43), (44, 57, 69), (19, 25, 31), (58, 74, 88)
+        TEAL, AMBER, TEXT = (72, 224, 193), (255, 180, 84), (243, 240, 232)
+        img = Image.new("RGB", (w, h), GRAPHITE)
+        d = ImageDraw.Draw(img, "RGBA")
+
+        def P(x, z):
+            return ((x + self.ex) * s, (z + self.ez) * s)
+
+        for o in self.ops:
+            if o["op"] == "outline":
+                d.polygon([P(*q) for q in o["poly"]], fill=STREET + (255,))
+        for o in self.ops:
+            t = o["op"]
+            if t == "sunken":
+                x0, z0, x1, z1 = o["r"]
+                d.rectangle([P(x0, z0), P(x1, z1)], fill=(30, 52, 64, 255), outline=TEAL + (90,))
+        for o in self.ops:
+            t = o["op"]
+            if t == "slab" and o.get("walk", True):
+                d.polygon([P(*q) for q in o["poly"]], fill=(78, 110, 122, 150) if o.get("solid") else (72, 224, 193, 40))
+        for o in self.ops:
+            t = o["op"]
+            if t == "block" and o.get("y0", 0.0) <= 0.5 and o["h"] >= 3.0:
+                x0, z0, x1, z1 = o["r"]
+                d.rectangle([P(x0, z0), P(x1, z1)], fill=MASS + (255,), outline=EDGE + (255,))
+            elif t == "poly_block":
+                d.polygon([P(*q) for q in o["poly"]], fill=MASS + (255,), outline=EDGE + (255,))
+            elif t == "room":
+                x0, z0, x1, z1 = o["r"]
+                d.rectangle([P(x0, z0), P(x1, z1)], fill=(52, 64, 76, 255), outline=AMBER + (170,), width=2)
+            elif t == "wall" and o["h"] >= 3.0:
+                d.line([P(*o["a"]), P(*o["b"])], fill=EDGE + (255,), width=max(2, int(o["t"] * s)))
+        for o in self.ops:
+            t = o["op"]
+            if t == "cover" and o["size"][1] >= 1.0:
+                x, z = o["p"]
+                r = 0.9 * s
+                d.rectangle([P(x, z)[0] - r, P(x, z)[1] - r * 0.7, P(x, z)[0] + r, P(x, z)[1] + r * 0.7], fill=EDGE + (200,))
+            elif t == "gate":
+                for q in (o["a"], o["b"]):
+                    px, pz = P(q[0], q[2])
+                    d.ellipse([px - 7, pz - 7, px + 7, pz + 7], outline=TEAL + (255,), width=2)
+            elif t == "zip":
+                d.line([P(o["a"][0], o["a"][2]), P(o["b"][0], o["b"][2])], fill=AMBER + (190,), width=2)
+            elif t == "sling":
+                px, pz = P(o["pad"][0], o["pad"][2])
+                d.polygon([(px, pz - 7), (px + 7, pz + 6), (px - 7, pz + 6)], fill=AMBER + (255,))
+            elif t == "ladder":
+                px, pz = P(o["base"][0], o["base"][2])
+                d.rectangle([px - 3, pz - 5, px + 3, pz + 5], outline=TEXT + (200,))
+        L = self.layout
+        if L:
+            for i, f in enumerate(L.get("fields", [])):
+                px, pz = P(f[0], f[2])
+                r = L["radius"] * s
+                d.ellipse([px - r, pz - r, px + r, pz + r], outline=TEAL + (200,), width=2, fill=TEAL + (36,))
+            for k, col in (("vault1", TEAL), ("vault2", AMBER)):
+                px, pz = P(L[k][0], L[k][2])
+                d.rectangle([px - 8, pz - 8, px + 8, pz + 8], fill=col + (255,), outline=TEXT + (255,))
+            for k, col in (("stab1", TEAL), ("stab2", AMBER)):
+                px, pz = P(L[k][0], L[k][2])
+                d.ellipse([px - 9, pz - 9, px + 9, pz + 9], outline=col + (255,), width=3)
+                d.ellipse([px - 3, pz - 3, px + 3, pz + 3], fill=col + (255,))
+        for o in self.ops:
+            if o["op"] == "spawn":
+                px, pz = P(o["p"][0], o["p"][1])
+                d.ellipse([px - 4, pz - 4, px + 4, pz + 4], fill=(TEAL if o["team"] == 1 else AMBER) + (255,))
+        img.save(path)
+
     # ------------------------------------------------------------ export
     def emit_gd(self, path, extra_const=""):
         ops = []
@@ -913,6 +1180,11 @@ def report(plan, carrier_pts=None, sight_layers=(0.0,), spawn_xz=None, heat_png=
             print("   visible from %-10s: %.1f%% of walkable points" % (nm, plan.visible_fraction(x, z) * 100))
     if plan_png:
         plan.render(plan_png, routes=routes)
+    for who, xz in (("west spawn", (-64, 0)), ("east spawn", (64, 0))):
+        lost = plan.reach_report(xz)
+        print("   reachability from %s (ladders allowed): %s" % (who, "all gameplay points and ladder tops reached" if not lost else "UNREACHED %s" % lost))
+    lost = plan.reach_report((-64, 0), carrier=True)
+    print("   reachability for a Core carrier (no ladders), points a carrier needs only: %s" % [l for l in lost if l[0].startswith(("vault", "stab", "fields", "spawn"))])
     bad = plan.check_points()
     if bad:
         print("   !! PLACEMENT PROBLEMS (point, position, clearance m):")

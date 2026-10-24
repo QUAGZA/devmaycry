@@ -8,6 +8,7 @@ Macro structure (carry route from the enemy vault at the far east to the home st
   south    : temples' south alleys -> south lanes -> chapels -> sunken basin (flank / rotation).
   gates    : home-side rotation pairs (gate court <-> reliquary yard); gates refuse the Core.
 """
+import os
 import sys
 sys.path.insert(0, __file__.rsplit("\\", 1)[0] if "\\" in __file__ else __file__.rsplit("/", 1)[0])
 from proto import Plan, report
@@ -144,6 +145,7 @@ def build():
     P.shards([[0, 0.5, 11], [-30, 3.5, -31], [30, 3.5, -31], [0, -1.1, 22], [-37.5, 0.5, 25.5], [37.5, 0.5, 25.5], [-52, 0.5, -30], [52, 0.5, -30]])
     P.beacons([[0, 0.5, -12], [-30, 3, -31], [30, 3, -31], [0, -1.6, 22]])
     P.solidify(h=(8.0, 12.0), maxdim=14.0)
+    P.slivers = P.fill_slivers()
     return P
 
 
@@ -151,6 +153,9 @@ if __name__ == "__main__":
     P = build()
     if "gen" in sys.argv:
         print("emitted", P.emit_gd("src/maps/plans/oracle_plan.gd"), "ops")
+        P.build()
+        os.makedirs("assets/ui", exist_ok=True)
+        P.render_preview("assets/ui/map_oracle_gardens.png")
         sys.exit(0)
     spawn = {"spawn_W": (-62, 3), "vault_W": (-43, 0), "stab_W": (-56, -31), "court": (0, 0), "terraceA": (-30, -31)}
     report(P, spawn_xz=spawn, heat_png="build/maps/oracle_heat.png", plan_png="build/maps/oracle_plan.png", sight_layers=(0.0, 3.0))

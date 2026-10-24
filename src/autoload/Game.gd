@@ -39,6 +39,23 @@ var map_open := false
 var echoes: Dictionary = {}
 var props: Dictionary = {}
 var menu_message := ""
+var _prompt := ""
+var _prompt_frame := -10
+
+
+## Contextual interaction prompt (zipline, gate, ladder): features set it each frame while the local player is in
+## range; the HUD shows it only while it is fresh.
+func set_prompt(text: String) -> void:
+	_prompt = text
+	_prompt_frame = Engine.get_process_frames()
+
+
+func current_prompt() -> String:
+	return _prompt if Engine.get_process_frames() - _prompt_frame <= 2 else ""
+
+
+var cli_consumed := false          # command-line roles (--role=host ...) run once; after a match the menu simply stays on the menu
+var intro_done := false            # the startup sequence already ran in this session (it never replays after a match)
 var open_lobby_on_menu := false
 var _map_ready: Dictionary = {}
 var _map_ready_t := 0.0
@@ -107,7 +124,7 @@ func _perf(delta: float) -> void:
 		log_ev("Perf", "sample", {"map": map_id, "fps": snappedf(_perf_frames / _perf_t, 0.1), "worst_ms": snappedf(_perf_worst * 1000.0, 0.1),
 			"draw_calls": Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME), "objects": Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME),
 			"vram_mb": snappedf(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0, 1), "players": players.size(), "projectiles": projectiles.live.size() if projectiles != null else 0,
-			"vsync": DisplayServer.window_get_vsync_mode(), "nodes": Performance.get_monitor(Performance.OBJECT_NODE_COUNT), "orphans": Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT), "audio_latency": snappedf(Performance.get_monitor(Performance.AUDIO_OUTPUT_LATENCY) * 1000.0, 0.1), "process_ms": snappedf(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0, 0.01), "physics_ms": snappedf(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0, 0.01), "nav_ms": snappedf(Performance.get_monitor(Performance.TIME_NAVIGATION_PROCESS) * 1000.0, 0.01) if Performance.has_method("get_monitor") else 0.0})
+			"vsync": DisplayServer.window_get_vsync_mode(), "focused": DisplayServer.window_is_focused(), "max_fps": Engine.max_fps, "win_mode": DisplayServer.window_get_mode(), "nodes": Performance.get_monitor(Performance.OBJECT_NODE_COUNT), "orphans": Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT), "audio_latency": snappedf(Performance.get_monitor(Performance.AUDIO_OUTPUT_LATENCY) * 1000.0, 0.1), "process_ms": snappedf(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0, 0.01), "physics_ms": snappedf(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0, 0.01), "nav_ms": snappedf(Performance.get_monitor(Performance.TIME_NAVIGATION_PROCESS) * 1000.0, 0.01) if Performance.has_method("get_monitor") else 0.0})
 		_perf_t = 0.0
 		_perf_frames = 0
 		_perf_worst = 0.0
@@ -373,6 +390,18 @@ func _physics_process(delta: float) -> void:
 			var pauses := 0.0 if key == "direct" else (7.0 if pts.size() == 3 else 14.0)
 			var e := HotReturnRules.route_exposure(total, pauses)
 			log_ev("Route", key, {"map": map_id, "metres": snappedf(total, 0.1), "carry_s": snappedf(float(e["carry"]), 0.1), "exposure_s": snappedf(float(e["exposure"]), 0.1), "volatility": snappedf(float(e["volatility"]), 0.1), "reachable": ok})
+	if args.has("perimeterprobe") and not _probed and server_tick > 60 and map_def != null:
+		_probed = true
+		_perimeter_probe()
+	if args.has("sightprobe") and not _probed and server_tick > 60 and map_def != null:
+		_probed = true
+		_sight_probe()
+	if args.has("featureprobe") and not _probed and server_tick > 60 and map_def != null:
+		_probed = true
+		_feature_probe()
+	if args.has("reachprobe") and not _probed and server_tick > 60 and map_def != null:
+		_probed = true
+		_reach_probe()
 	if args.has("navprobe") and not _probed and server_tick > 60:
 		_probed = true
 		var map_rid: RID = world.get_world_3d().navigation_map
@@ -417,6 +446,182 @@ func _physics_process(delta: float) -> void:
 			log_ev("Snap", "players", {"n": players.size(), "p": d, "time_left": snappedf(time_left, 0.1), "phase": state.get("phase", "")})
 
 
+## --perimeterprobe: from just inside every stretch of the outline, rays fired outward at foot, waist, head and
+## above-head height must hit solid collision within 3 m (walls, rails and their invisible barrier). A miss is a
+## gap a player or bot could walk, jump or be launched through.
+func _perimeter_probe() -> void:
+	var space := world.get_world_3d().direct_space_state
+	var out := map_def.outline
+	var rays := 0
+	var misses: Array = []
+	for i in out.size():
+		var a := out[i]
+		var b := out[(i + 1) % out.size()]
+		var length := a.distance_to(b)
+		var dir := (b - a) / length
+		var n := Vector2(dir.y, -dir.x)
+		if not Geometry2D.is_point_in_polygon(a + (b - a) * 0.5 + n * 0.8, out):
+			n = -n
+		var t := 0.0
+		while t <= length:
+			var p := a + dir * t
+			for h in [0.15, 1.0, 1.7, 3.5]:
+				var origin := Vector3(p.x + n.x * 1.2, h, p.y + n.y * 1.2)
+				var target := Vector3(p.x - n.x * 1.8, h, p.y - n.y * 1.8)
+				rays += 1
+				if space.intersect_ray(PhysicsRayQueryParameters3D.create(origin, target, 1)).is_empty():
+					misses.append([snappedf(p.x, 0.1), h, snappedf(p.y, 0.1)])
+			t += 1.0
+	log_ev("Perimeter", "probe", {"map": map_id, "segments": out.size(), "rays": rays, "misses": misses.size(), "first": misses.slice(0, 8)})
+
+
+## --sightprobe: sightline statistics measured on the real colliders (not the offline plan). Random navmesh points,
+## 48 horizontal rays each at eye height; reports, per level, the share of rays longer than 25 / 35 m and the
+## percentiles of each point's longest ray (80 m = unobstructed to the cap).
+func _sight_probe() -> void:
+	var map_rid: RID = world.get_world_3d().navigation_map
+	var space := world.get_world_3d().direct_space_state
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	var buckets := {"ground": [], "raised": [], "sunken": []}
+	var rays := {"ground": [0, 0, 0], "raised": [0, 0, 0], "sunken": [0, 0, 0]}
+	var long_pts: Array = []
+	for i in 1400:
+		var p := NavigationServer3D.map_get_random_point(map_rid, 3, true)
+		if p.y > 0.8 and p.y < 1.6:
+			continue   # the top of a low rail or parapet is a navmesh strip nobody can reach
+		var bucket := "ground"
+		if p.y > 2.0:
+			bucket = "raised"
+		elif p.y < -1.0:
+			bucket = "sunken"
+		var eye := p + Vector3(0, 1.6, 0)
+		var best := 0.0
+		var best_deg := 0
+		for k in 48:
+			var ang := TAU * float(k) / 48.0
+			var q := PhysicsRayQueryParameters3D.create(eye, eye + Vector3(cos(ang), 0, sin(ang)) * 80.0, 1)
+			var hit := space.intersect_ray(q)
+			var d := 80.0 if hit.is_empty() else eye.distance_to(hit["position"])
+			if d > best:
+				best_deg = int(round(rad_to_deg(ang)))
+			best = maxf(best, d)
+			rays[bucket][0] += 1
+			rays[bucket][1] += 1 if d > 25.0 else 0
+			rays[bucket][2] += 1 if d > 35.0 else 0
+		(buckets[bucket] as Array).append(best)
+		if best >= 79.0 and bucket == "ground" and long_pts.size() < 8:
+			long_pts.append([snappedf(p.x, 0.1), snappedf(p.y, 0.1), snappedf(p.z, 0.1), best_deg])
+	var out := {}
+	for b in buckets:
+		var arr: Array = buckets[b]
+		arr.sort()
+		if arr.size() < 10:
+			continue
+		out[b] = {"points": arr.size(), "p50": snappedf(arr[arr.size() / 2], 0.1), "p90": snappedf(arr[int(arr.size() * 0.9)], 0.1), "p99": snappedf(arr[int(arr.size() * 0.99)], 0.1),
+			"rays_over_25_pct": snappedf(100.0 * rays[b][1] / maxf(1.0, rays[b][0]), 0.1), "rays_over_35_pct": snappedf(100.0 * rays[b][2] / maxf(1.0, rays[b][0]), 0.1)}
+	log_ev("Sight", "probe", {"map": map_id, "levels": out, "unobstructed_ground_points": long_pts})
+
+
+## --featureprobe: sweep every zipline with the player capsule, check both anchors and every gate's exit for room.
+func _feature_probe() -> void:
+	var results: Array = []
+	var bad := 0
+	for fe in map_def.features.get_children():
+		if fe is Features.Zipline:
+			var r: Dictionary = fe.validate()
+			results.append(r)
+			if not bool(r["ok"]):
+				bad += 1
+		elif fe is Features.PhaseGate:
+			var r2: Dictionary = fe.validate()
+			results.append(r2)
+			if not bool(r2["ok"]):
+				bad += 1
+	# negative control: a capsule placed inside the first solid box block of the map must report blocked
+	var control := false
+	for body in map_def.geometry.get_children():
+		if body is StaticBody3D and body.get_child_count() > 0 and (body.get_child(0) as CollisionShape3D).shape is BoxShape3D:
+			var bs := (body.get_child(0) as CollisionShape3D).shape as BoxShape3D
+			if bs.size.y >= 2.5 and minf(bs.size.x, bs.size.z) >= 1.5:
+				control = Features.blocked(world.get_world_3d(), (body as Node3D).global_position - Vector3(0, bs.size.y * 0.5 - 0.3, 0))
+				break
+	log_ev("Feature", "probe", {"map": map_id, "checked": results.size(), "failed": bad, "control_centre_blocked": control, "detail": results})
+
+
+## --reachprobe: every gameplay point must be reachable on the navmesh from both teams' spawns (walking, then
+## with ladders allowed), and the Core's own route (vault -> stabilizer) must exist without ladders.
+func _reach_probe() -> void:
+	var map_rid: RID = world.get_world_3d().navigation_map
+	var d := map_def
+	var targets: Array = []
+	for k in d.vaults:
+		targets.append(["vault%d" % k, d.vaults[k]])
+	for k in d.stabilizers:
+		targets.append(["stab%d" % k, d.stabilizers[k]])
+	for i in d.fields.size():
+		targets.append(["field%d" % i, d.fields[i]["position"]])
+	for i in d.shard_points.size():
+		targets.append(["shard%d" % i, d.shard_points[i]])
+	for i in d.beacon_points.size():
+		targets.append(["beacon%d" % i, d.beacon_points[i]])
+	for i in d.ffa_spawns.size():
+		targets.append(["ffa%d" % i, d.ffa_spawns[i]["position"]])
+	for role in ["attack", "defend"]:
+		for i in d.role_spawns[role].size():
+			targets.append(["spawn_%s%d" % [role, i], d.role_spawns[role][i]["position"]])
+	for i in d.ladders.size():
+		var lad: Dictionary = d.ladders[i]
+		targets.append(["ladder%d_top" % i, Vector3(lad["base"].x, lad["top_y"], lad["base"].z) - Vector3(lad["out"]) * 1.4])
+	for fe in d.features.get_children():
+		if fe is Features.PhaseGate:
+			targets.append(["gate_%s_in" % fe.gate_name, fe.global_position])
+			targets.append(["gate_%s_out" % fe.gate_name, fe.exit_pos])
+		elif fe is Features.Zipline:
+			targets.append(["zip_%s_a" % fe.zip_name, fe.a])
+			targets.append(["zip_%s_b" % fe.zip_name, fe.b])
+	var bad: Array = []
+	var total := 0
+	for role in ["attack", "defend"]:
+		var from: Vector3 = d.role_spawns[role][0]["position"]
+		for t in targets:
+			var to: Vector3 = t[1]
+			for layers in [3, 1]:
+				if layers == 1 and not (str(t[0]).begins_with("vault") or str(t[0]).begins_with("stab") or str(t[0]).begins_with("field") or str(t[0]).begins_with("spawn")):
+					continue
+				total += 1
+				var path := NavigationServer3D.map_get_path(map_rid, from, to, true, layers)
+				var end: Vector3 = path[path.size() - 1] if path.size() > 0 else from
+				var gap := Vector2(end.x - to.x, end.z - to.z).length()
+				if path.size() < 2 or gap > 2.5 or absf(end.y - to.y) > 3.2:
+					bad.append({"from": role, "to": t[0], "layers": layers, "gap": snappedf(gap, 0.1), "dy": snappedf(end.y - to.y, 0.1)})
+	# Core route without ladders, both directions
+	for pair in [[1, 2], [2, 1]]:
+		var vault: Vector3 = d.vaults.get(pair[0], Vector3.ZERO)
+		var stab: Vector3 = d.stabilizers.get(pair[1], Vector3.ZERO)
+		var path := NavigationServer3D.map_get_path(map_rid, vault, stab, true, 1)
+		total += 1
+		var end: Vector3 = path[path.size() - 1] if path.size() > 0 else vault
+		if path.size() < 2 or Vector2(end.x - stab.x, end.z - stab.z).length() > 2.5:
+			bad.append({"from": "vault%d" % pair[0], "to": "stab%d" % pair[1], "layers": 1, "gap": -1.0, "dy": 0.0})
+	var crowded: Array = []
+	var w3 := world.get_world_3d()
+	for role in ["attack", "defend"]:
+		for i in d.role_spawns[role].size():
+			if Features.blocked(w3, d.role_spawns[role][i]["position"]):
+				crowded.append("spawn_%s%d" % [role, i])
+	for i in d.ffa_spawns.size():
+		if Features.blocked(w3, d.ffa_spawns[i]["position"]):
+			crowded.append("ffa%d" % i)
+	for k in d.vaults:
+		if Features.blocked(w3, d.vaults[k]):
+			crowded.append("vault%d" % k)
+	for k in d.stabilizers:
+		if Features.blocked(w3, d.stabilizers[k]):
+			crowded.append("stab%d" % k)
+	log_ev("Reach", "probe", {"map": map_id, "checked": total, "unreachable": bad.size(), "blocked_spawns": crowded.size(), "blocked_list": crowded, "ladders": d.ladders.size(), "bad": bad})
+
+
 func _process(delta: float) -> void:
 	if args.has("perf"):
 		_perf(delta)
@@ -456,6 +661,13 @@ func _process(delta: float) -> void:
 		_shot_elapsed += delta
 		if args.has("open-map-at") and _shot_elapsed >= float(args["open-map-at"]):
 			map_open = true
+		if args.has("pause-at") and _shot_elapsed >= float(args["pause-at"]):
+			args.erase("pause-at")
+			set_paused(true)
+		if args.has("return-menu-at") and _shot_elapsed >= float(args["return-menu-at"]):
+			args.erase("return-menu-at")
+			log_ev("Debug", "return_to_menu", {})
+			return_to_menu("", false)
 		if not _shots.is_empty() and _shot_elapsed >= _shots[0]:
 			var at: float = _shots.pop_front()
 			_take_screenshot(at)

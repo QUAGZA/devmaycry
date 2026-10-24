@@ -28,6 +28,7 @@ var features: Node3D = null
 var _mats: Dictionary = {}
 var floor_polys: Array = []       # [{pts: PackedVector2Array, y}] authored floor topology for the minimap
 var ladders: Array = []           # [{base, top_y, out}]
+var outline := PackedVector2Array()  # playable boundary polygon (plan-built maps); used by the perimeter test
 var dev_map := false              # true for the developer test arena
 var family := "oracle"             # material family for Style.kind_for (oracle / tideline / foundry)
 

@@ -45,6 +45,7 @@ static func run(def: MapDef, ops: Array, layout: Dictionary, extent: Vector2, ma
 				var r: Array = op["r"]
 				holes.append(PackedVector2Array([Vector2(r[0], r[1]), Vector2(r[2], r[1]), Vector2(r[2], r[3]), Vector2(r[0], r[3])]))
 	MapKit.floor_with_holes(def, outline, holes, 0.0, 3.5, _m(mats, "floor"))
+	def.outline = outline
 	_perimeter(def, ops, outline, mats)
 	# ---- everything else in authored order
 	for op in ops:

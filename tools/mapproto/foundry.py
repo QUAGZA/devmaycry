@@ -12,6 +12,7 @@ ladders climb the tower.  Gates link the two yards on each home side (they refus
   upper  : landing decks + walkways (y 6) + tower: stairs for carriers, launch pads and ladders for the rest
 """
 import math
+import os
 import sys
 sys.path.insert(0, __file__.rsplit("\\", 1)[0] if "\\" in __file__ else __file__.rsplit("/", 1)[0])
 from proto import Plan, report
@@ -39,20 +40,27 @@ def build():
     P.outline([(0, -41.5), (-50, -41.5), (-60, -37), (-70, -26), (-70, 26), (-60, 36), (-50, 40), (0, 40)])
 
     # ---------------------------------------------------------------- ring street, ring wall, reactor
-    for poly in sectors(14.9, 21.1, 32):
+    for poly in sectors(14.5, 21.9, 32):          # overlaps both walls so every opening stays unfilled
         P.free_poly(poly, mirror=False)
     ringv = ngon(22.0, 32, -5.625)
     for k in range(32):
         if k % 8 == 0:                          # openings on the four axes
             continue
         P.wall(ringv[k], ringv[(k + 1) % 32], 9.0, 1.2, "wall_c", mirror=False)
-    rv = ngon(14.0, 24, -7.5)
+    rv = ngon(14.5, 24, -7.5)
     for k in range(24):
         if k % 6 == 3:                          # reactor doors on the diagonals
             continue
-        P.wall(rv[k], rv[(k + 1) % 24], 11.0, 1.0, "wall_b", mirror=False)
-    P.platform([(x, z) for x, z in ngon(14.7, 24, -7.5)], 11.5, mat="roof", solid=False, thick=0.5, walk=False, mirror=False, roof=True)
-    P.free_poly(ngon(13.4, 24, -7.5), mirror=False)                          # reactor interior
+        a, b = list(rv[k]), list(rv[(k + 1) % 24])
+        seg = math.hypot(b[0] - a[0], b[1] - a[1])
+        ux, uz = (b[0] - a[0]) / seg, (b[1] - a[1]) / seg
+        if k % 6 == 4:                          # jamb on the door's near side: pull the wall back to widen the opening
+            a = [a[0] + ux * 0.8, a[1] + uz * 0.8]
+        if k % 6 == 2:
+            b = [b[0] - ux * 0.8, b[1] - uz * 0.8]
+        P.wall(a, b, 11.0, 1.0, "wall_b", mirror=False)
+    P.platform([(x, z) for x, z in ngon(15.2, 24, -7.5)], 11.5, mat="roof", solid=False, thick=0.5, walk=False, mirror=False, roof=True)
+    P.free_poly(ngon(14.5, 24, -7.5), mirror=False)                          # reactor interior
     P.cover("cyl", 0, 0, (2.3, 9.0), mat="steel", mirror=False)              # reactor core
     for a in (0, 90, 180, 270):
         x, z = 8.8 * math.cos(math.radians(a)), 8.8 * math.sin(math.radians(a))
@@ -135,8 +143,6 @@ def build():
     P.block(-22, 31, -21, 35, 2.6, "wall_c", y0=TUN)
     P.block(-14, 27, -13, 31, 2.6, "wall_c", y0=TUN)
     P.block(-3, 31, 3, 35, 2.6, "wall_c", y0=TUN, mirror=False)
-    P.cover("box", -26, 33, (2.4, 1.2, 1.2), 0, "cover_machine", y0=TUN)
-    P.cover("box", -18, 29, (2.4, 1.2, 1.2), 0, "cover_machine", y0=TUN)
     for gx in (-26, -10, 10, 26):
         P.light(gx, TUN + 2.2, 31, "FFB070", 1.1, 8.0, mirror=False)
 
@@ -168,6 +174,7 @@ def build():
     P.shards([[4.5, 0.5, 4.5], [-26, TUN + 0.5, 30], [26, TUN + 0.5, 30], [-30, TW + 0.5, -36.6], [30, TW + 0.5, -36.6], [0, 0.5, -26], [0, 0.5, 23], [0, TW + 0.5, -31]])
     P.beacons([[4.5, 0.5, 4.5], [0, TW, -31], [-26, TUN, 30], [26, TUN, 30]])
     P.solidify(h=(7.0, 11.0), maxdim=14.0, mats=("wall_a", "wall_b", "wall_c"))
+    P.slivers = P.fill_slivers()
     return P
 
 
@@ -175,6 +182,9 @@ if __name__ == "__main__":
     P = build()
     if "gen" in sys.argv:
         print("emitted", P.emit_gd("src/maps/plans/foundry_plan.gd"), "ops")
+        P.build()
+        os.makedirs("assets/ui", exist_ok=True)
+        P.render_preview("assets/ui/map_vector_foundry.png")
         sys.exit(0)
     spawn = {"spawn_W": (-64, 0), "vault_W": (-47, 0), "stab_W": (-58, 18), "ring": (18.5, 0), "tunnelW": (-26, 31), "tower": (0, -36.5)}
     report(P, spawn_xz=spawn, heat_png="build/maps/foundry_heat.png", plan_png="build/maps/foundry_plan.png", sight_layers=(0.0, 6.0, -3.2))

@@ -10,6 +10,7 @@ cables: stairs and ramps only.
   north  : enemy bay north door / hall north lane -> quay -> west corner -> west exit (defenders' flank)
   upper  : gantry (y 5) over the quay, hall galleries (y 5), bay mezzanines (y 4): ladders for non-carriers
 """
+import os
 import sys
 sys.path.insert(0, __file__.rsplit("\\", 1)[0] if "\\" in __file__ else __file__.rsplit("/", 1)[0])
 from proto import Plan, report
@@ -81,33 +82,39 @@ def build():
     P.zip((11, TY, -14.2), (-11, TY, 14.2), "HALL B", "HALL B", mirror=False)
 
     # ---------------------------------------------------------------- north: quay lane, gantry, warehouse passage
-    P.free(-60, -38, -14, -30)                 # quay lane (8 m deep, open to the sea on the north rail)
-    P.free(-9, -38, 9, -30)                    # central quay
     P.free(-42, -30, -38, -10)                 # bay north-door lane
-    P.free(-9, -30, -3, -17)                   # hall north lane
+    P.free(-60, -38, -14, -30)                 # quay (8 m deep, open to the sea on the north rail)
+    P.free(-9, -38, 9, -30)                    # central quay
+    P.free(-3, -30, 3, -17)                    # hall north lane, straight to the hall's north door
     P.room(-34, -26, -22, -9, 7.0, doors={"n": [[0, 4]], "s": [[0, 4]]}, mat="wall_c", roof="roof", lights=[[-28, 5.6, -17]])   # warehouse passage
     P.free(-30, -30, -26, -26)                 # quay -> warehouse north door
     P.free(-30, -9, -26, -6)                   # warehouse south door -> yard
     P.cover("box", -31, -21, (1.6, 2.2, 6.0), 0, "cover_crate_b")              # racks: indoor aisles
     P.cover("box", -25, -15, (1.6, 2.2, 6.0), 0, "cover_crate")
-    P.block(-56, -35, -51, -31.5, 5.2, "cover_crate")                          # double stack
-    P.cover("box", -47, -33.5, (2.6, 2.6, 4.6), 0, "cover_crate_b")
-    P.block(-33, -34.5, -30, -31.4, 5.2, "cover_crate_b")
-    P.cover("box", -20, -33.5, (5.0, 2.6, 2.6), 0, "cover_crate")
-    P.column(-24.5, -31, 5.0, 0.6, mat="steel")                                  # crane legs
-    P.column(-15.5, -34.5, 5.0, 0.6, mat="steel")
-    P.cover("box", -5, -33, (2.6, 1.3, 2.6), 0, "cover_crate")
-    P.cover("box", 0, -31.5, (2.6, 2.6, 2.6), 0, "cover_crate_b", mirror=False)
+    # customs fences across the quay (4.4 m, below the gantry): every 12 m one has to turn through a 3.4 m gap
+    for fx, gap_north in ((-45.0, True), (-33.0, False), (-21.0, True)):
+        if gap_north:
+            P.wall((fx, -30.0), (fx, -34.4), 4.4, 0.6, "wall_a")
+        else:
+            P.wall((fx, -38.0), (fx, -33.6), 4.4, 0.6, "wall_a")
+    P.cover("box", -55.5, -31.6, (3.0, 1.3, 2.4), 0, "cover_crate_b")
+    P.cover("box", -39, -35.3, (2.6, 1.3, 2.6), 0, "cover_crate")
+    P.cover("box", -27, -31.3, (2.6, 1.3, 2.6), 0, "cover_crate_b")
+    P.cover("box", -17.5, -35.8, (2.6, 1.3, 2.2), 0, "cover_crate")
+    P.column(-37.5, -30.8, 4.2, 0.55, mat="steel")                                  # crane legs
+    P.column(-24.5, -37.0, 4.2, 0.55, mat="steel")
+    P.cover("box", -6, -33.5, (2.6, 1.3, 2.6), 0, "cover_crate")
+    P.cover("box", 0, -35.0, (2.6, 1.3, 2.6), 0, "cover_crate_b", mirror=False)
     # gantry over the quay's north half (y 5): ladders for everyone else, stairs at the west end for carriers
-    P.platform([-58, -36.2, -14, -32.8], TY, mat="steel", solid=False, thick=0.45)
-    P.platform([-14, -36.2, 14, -32.8], TY, mat="steel", solid=False, thick=0.45, mirror=False)
-    P.wall((-58, -36.0), (-14, -36.0), 1.1, 0.25, "steel", y0=TY)
-    P.stairs((-62, 0, -31), (-58, TY, -34.4), 3.0)
-    P.ladder((-40, 0, -31.2), TY, (0, 1), "Q1", "Q1")
-    P.ladder((-19, 0, -31.2), TY, (0, 1), "Q2", "Q2")
-    P.cover("box", -46, -34.8, (2.2, 1.0, 0.9), 0, "cover_crate", y0=TY)
-    P.cover("box", -28, -34.4, (0.9, 1.0, 2.2), 0, "cover_crate", y0=TY)
-    P.zip((-56, TY, -34.5), (-20, TY, -34.5), "QUAY W", "QUAY E")
+    P.platform([-49, -37.6, -14, -33.4], TY, mat="steel", solid=False, thick=0.45)
+    P.platform([-14, -37.6, 14, -33.4], TY, mat="steel", solid=False, thick=0.45, mirror=False)
+    P.wall((-49, -37.4), (-14, -37.4), 1.1, 0.25, "steel", y0=TY)
+    P.stairs((-59, 0, -35.5), (-49, TY, -35.5), 3.0)
+    P.ladder((-39.5, 0, -32.2), TY, (0, 1), "Q1", "Q1")
+    P.ladder((-17.5, 0, -32.2), TY, (0, 1), "Q2", "Q2")
+    P.cover("box", -43, -36.5, (2.2, 1.0, 0.9), 0, "cover_crate", y0=TY)
+    P.cover("box", -28, -36.5, (2.2, 1.0, 0.9), 0, "cover_crate", y0=TY)
+    P.zip((-47, TY, -35.4), (-18, TY, -35.4), "QUAY W", "QUAY E")
 
     # ---------------------------------------------------------------- south: lanes, yard, channel
     P.free(-50, 10, -46, 24)                   # bay south-door lane
@@ -124,10 +131,10 @@ def build():
     P.sunken(-52, 27, 52, 35, CH, mirror=False)                              # loading channel (weirs make S-bends)
     P.stairs((-48, 0, 27), (-48, CH, 32.5), 4.0)                              # carrier entry/exit stairs at the ends
     P.ladder((-20, CH, 28.2), 0.0, (0, 1), "C1", "C1")                        # mid access: ladders only (no carrier shortcut)
-    P.block(-40, 27, -39, 31, 3.0, "wall_c", y0=CH)                           # weirs: S-bend gaps alternate side
-    P.block(-27, 31, -26, 35, 3.0, "wall_c", y0=CH)
-    P.block(-14, 27, -13, 31, 3.0, "wall_c", y0=CH)
-    P.block(-3, 31, 3, 35, 3.0, "wall_c", y0=CH, mirror=False)
+    P.block(-40, 27, -39, 31, 4.6, "wall_c", y0=CH)                           # weirs (2.2 m above the lane: nobody sees over them from the stairs): S-bend gaps alternate side
+    P.block(-27, 31, -26, 35, 4.6, "wall_c", y0=CH)
+    P.block(-14, 27, -13, 31, 4.6, "wall_c", y0=CH)
+    P.block(-3, 31, 3, 35, 4.6, "wall_c", y0=CH, mirror=False)
     P.cover("box", -30.5, 33.2, (2.6, 1.3, 1.2), 0, "cover_crate", y0=CH)
     P.cover("box", -20, 33, (2.6, 1.3, 1.2), 0, "cover_crate", y0=CH)
 
@@ -141,7 +148,7 @@ def build():
     # ---------------------------------------------------------------- temporal barricades (restorable cover)
     P.prop(-27, 1.5, (2.6, 1.6, 0.5), 90, color="5A6AA0")                      # yard street
     P.prop(-22, 17.5, (2.6, 1.6, 0.5), 90, color="5A6AA0")                     # south yard
-    P.prop(-44, -34.6, (3.0, 1.6, 0.5), 0, color="5A6AA0")                     # quay below the gantry
+    P.prop(-50, -31.2, (2.6, 1.6, 0.5), 90, color="5A6AA0")                    # quay west end
     P.prop(-60, 15.5, (2.6, 1.6, 0.5), 0, color="5A6AA0")                      # south exit
     P.prop(-6.5, -9.0, (2.6, 1.6, 0.5), 0, color="5A6AA0", mirror=False)       # hall floor, north side
     P.prop(6.5, 9.0, (2.6, 1.6, 0.5), 0, color="5A6AA0", mirror=False)         # hall floor, south side
@@ -149,11 +156,12 @@ def build():
     # ---------------------------------------------------------------- spawns / objectives / modes
     P.spawn_west([(-63, -6, -90), (-63, 6, -90), (-61, -2.5, -90), (-61, 2.5, -90)])
     P.set_layout([-44, 0, 0], [44, 0, 0], [-57, 0, 24.5], [57, 0, 24.5], [[-34, CH, 30], [34, CH, 30]], 8.0, 1.6)
-    P.ffa([[-64, -6, -90], [-64, 6, -90], [-56, 24.5, 0], [-34, 30, 0], [-26, -33.5, 0], [-6, -34.5, 180], [0, 22, 180], [-30, 0, 90],
-           [64, -6, 90], [64, 6, 90], [56, 24.5, 0], [34, 30, 0], [26, -33.5, 0], [6, -34.5, 180], [30, 0, -90], [-22, 18.5, 0]])
-    P.shards([[-4.6, 0.5, 1.8], [-34, CH + 0.5, 30], [34, CH + 0.5, 30], [-38, TY + 0.5, -34.5], [38, TY + 0.5, -34.5], [0, 0.5, -34.5], [-3, TY + 0.5, -14.4], [3, TY + 0.5, 14.4]])
-    P.beacons([[-4.6, 0.5, 1.8], [0, 0.5, -34.5], [-34, CH, 30], [34, CH, 30]])
+    P.ffa([[-64, -6, -90], [-64, 6, -90], [-56, 24.5, 0], [-34, 30, 0], [-35.5, -35.5, 0], [-2.5, -31.5, 180], [0, 22, 180], [-30, 0, 90],
+           [64, -6, 90], [64, 6, 90], [56, 24.5, 0], [34, 30, 0], [35.5, -35.5, 0], [2.5, -31.5, 180], [30, 0, -90], [-22, 18.5, 0]])
+    P.shards([[-4.6, 0.5, 1.8], [-34, CH + 0.5, 30], [34, CH + 0.5, 30], [-37, TY + 0.5, -35.5], [37, TY + 0.5, -35.5], [0.5, 0.5, -31.5], [-3, TY + 0.5, -14.4], [3, TY + 0.5, 14.4]])
+    P.beacons([[-4.6, 0.5, 1.8], [0.5, 0.5, -31.5], [-34, CH, 30], [34, CH, 30]])
     P.solidify(h=(7.0, 11.0), maxdim=14.0, mats=("wall_a", "wall_b", "wall_c"))
+    P.slivers = P.fill_slivers()
     return P
 
 
@@ -161,6 +169,9 @@ if __name__ == "__main__":
     P = build()
     if "gen" in sys.argv:
         print("emitted", P.emit_gd("src/maps/plans/tideline_plan.gd"), "ops")
+        P.build()
+        os.makedirs("assets/ui", exist_ok=True)
+        P.render_preview("assets/ui/map_tideline_exchange.png")
         sys.exit(0)
     spawn = {"spawn_W": (-62, 0), "vault_W": (-44, 0), "stab_W": (-57, 24.5), "hall": (0, 0), "channelW": (-34, 30)}
     report(P, spawn_xz=spawn, heat_png="build/maps/tideline_heat.png", plan_png="build/maps/tideline_plan.png", sight_layers=(0.0, 5.0, -2.4))

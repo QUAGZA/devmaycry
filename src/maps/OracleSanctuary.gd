@@ -13,6 +13,7 @@ extends MapDef
 
 const PLAN := preload("res://src/maps/plans/oracle_plan.gd")
 
+const STYLE := {"seed": 11, "rows": [3.4, 6.6], "window": Vector2(1.0, 1.7), "pier_gap": 5.0, "lit": 0.16, "skip": 0.10}
 
 func _init() -> void:
 	family = "oracle"
@@ -41,10 +42,32 @@ func _materials() -> Dictionary:
 	}
 
 
+func _facade_materials() -> Dictionary:
+	var glow := StandardMaterial3D.new()
+	glow.albedo_color = Color("FFD9A0")
+	glow.emission_enabled = true
+	glow.emission = Color("FFC27A")
+	glow.emission_energy_multiplier = 1.4
+	var glass := StandardMaterial3D.new()
+	glass.albedo_color = Color("26324A")
+	glass.roughness = 0.25
+	glass.metallic = 0.3
+	return {
+		"plinth": Style.surface("stone", Color("A8977A")),
+		"trim": Style.surface("stone", Color("F2E9D6")),
+		"band": Style.surface("ceramic", Color("2F6B66")),
+		"glass": glass,
+		"glass_lit": glow,
+	}
+
 func _build_layout() -> void:
 	light_env(Vector3(-0.5, -0.62, 0.42), Color("FFE2BE"), Color("6F95C2"), Color("EAD9B8"), Color("6E685C"), Color("DCCFB4"), 0.0018)
 	var stats := PlanRunner.run(self, PLAN.OPS, PLAN.LAYOUT, PLAN.EXTENT, _materials())
 	Game.log_ev("Map", "plan_built", {"map": id, "stats": stats})
+	var fm := _materials().duplicate()
+	fm.merge(_facade_materials())
+	var fs := Facades.build(self, PLAN.OPS, PLAN.EXTENT, fm, STYLE)
+	Game.log_ev("Map", "facades", {"map": id, "stats": fs})
 	_backdrop()
 	MapDecor.dress_boxes(self)
 

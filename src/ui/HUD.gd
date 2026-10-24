@@ -337,20 +337,22 @@ func _build_pause() -> void:
 	pause_panel.set_anchors_preset(Control.PRESET_CENTER)
 	pause_panel.position = Vector2(-220, -170)
 	pause_panel.size = Vector2(440, 340)
-	pause_panel.add_theme_stylebox_override("panel", UiTheme.card(Color(Palette.INK, 0.94), Palette.PORCELAIN, 1, 2, 24))
+	pause_panel.theme = UiTheme.menu_theme()
+	pause_panel.add_theme_stylebox_override("panel", UiTheme.card_menu(0.97))
 	pause_panel.visible = false
 	root.add_child(pause_panel)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
 	pause_panel.add_child(v)
-	v.add_child(UiTheme.stamp("MATCH PAUSED (LOCAL)", Palette.VERMILION, 14))
-	v.add_child(UiTheme.label("ECHO CLASH", 36, Palette.PORCELAIN, UiTheme.display_font()))
+	v.add_child(UiTheme.stamp("MATCH PAUSED (LOCAL)", UiTheme.AMBER, 14))
+	v.add_child(UiTheme.label("ECHO CLASH", 36, UiTheme.TEXT, UiTheme.title_font(4)))
 	v.add_child(UiTheme.rule())
 	var resume := Button.new()
 	resume.text = "RESUME"
+	UiTheme.style_primary(resume)
 	resume.pressed.connect(func() -> void: Game.set_paused(false))
 	v.add_child(resume)
-	v.add_child(UiTheme.stamp("MOUSE SENSITIVITY", Palette.MINT, 13))
+	v.add_child(UiTheme.stamp("MOUSE SENSITIVITY", UiTheme.TEAL, 13))
 	var sens := HSlider.new()
 	sens.min_value = 0.0005
 	sens.max_value = 0.006
@@ -360,7 +362,7 @@ func _build_pause() -> void:
 		Settings.mouse_sensitivity = val
 		Settings.save_prefs())
 	v.add_child(sens)
-	v.add_child(UiTheme.stamp("MASTER VOLUME", Palette.MINT, 13))
+	v.add_child(UiTheme.stamp("MASTER VOLUME", UiTheme.TEAL, 13))
 	var vol := HSlider.new()
 	vol.min_value = 0.0
 	vol.max_value = 1.0
@@ -370,7 +372,7 @@ func _build_pause() -> void:
 		Settings.master_volume = val
 		Settings.save_prefs())
 	v.add_child(vol)
-	var controls := UiTheme.label("WASD move  ·  SHIFT sprint  ·  SPACE jump  ·  C crouch  ·  CTRL dash\nLMB fire  ·  R reload  ·  Q echo  ·  E interact  ·  TAB scoreboard", 13, Palette.STONE, UiTheme.mono_font())
+	var controls := UiTheme.label("WASD move  ·  SHIFT sprint  ·  SPACE jump  ·  C crouch  ·  CTRL dash\nLMB fire  ·  R reload  ·  Q echo  ·  E interact  ·  TAB scoreboard", 13, UiTheme.MUTED, UiTheme.mono_font())
 	v.add_child(controls)
 	var leave := Button.new()
 	leave.text = "LEAVE MATCH"
@@ -635,6 +637,8 @@ func _process(delta: float) -> void:
 				hint = "CARRYING THE CAUSAL CORE / reach your home Stabilizer before it detonates"
 			else:
 				hint = "CARRYING THE RESONANCE CORE / hold E inside a site to plant"
+		if hint == "":
+			hint = Game.current_prompt()
 		hint_lbl.text = hint
 		if minimap.view_radius != 42.0:
 			pass

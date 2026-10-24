@@ -14,6 +14,8 @@ const PLAN := preload("res://src/maps/plans/tideline_plan.gd")
 const CHANNEL_Y := -2.4
 const TY := 5.0
 
+const STYLE := {"seed": 21, "rows": [3.0, 6.0], "window": Vector2(1.7, 1.0), "pier_gap": 6.0, "lit": 0.22, "skip": 0.14,
+	"hazard_band": "hazard", "hazard_chance": 0.35, "pipe": "pipe", "pipe_chance": 0.35, "pipe_y": 4.6}
 
 func _init() -> void:
 	family = "tideline"
@@ -46,10 +48,34 @@ func _materials() -> Dictionary:
 	}
 
 
+func _facade_materials() -> Dictionary:
+	var glow := StandardMaterial3D.new()
+	glow.albedo_color = Color("FFE2B0")
+	glow.emission_enabled = true
+	glow.emission = Color("FFD08A")
+	glow.emission_energy_multiplier = 1.3
+	var glass := StandardMaterial3D.new()
+	glass.albedo_color = Color("1E2A3A")
+	glass.roughness = 0.2
+	glass.metallic = 0.35
+	return {
+		"plinth": Style.surface("metal", Color("3A4150")),
+		"trim": Style.surface("concrete", Color("B8B2A6")),
+		"band": Style.surface("ceramic", Color("C8622F")),
+		"hazard": Style.surface("ceramic", Color("D99A2B")),
+		"pipe": Style.surface("metal", Color("4A505A")),
+		"glass": glass,
+		"glass_lit": glow,
+	}
+
 func _build_layout() -> void:
 	light_env(Vector3(0.35, -0.7, -0.5), Color("FFF4E4"), Color("6E8DB0"), Color("D2DCE0"), Color("4E5660"), Color("BFCBD2"), 0.003)
 	var stats := PlanRunner.run(self, PLAN.OPS, PLAN.LAYOUT, PLAN.EXTENT, _materials())
 	Game.log_ev("Map", "plan_built", {"map": id, "stats": stats})
+	var fm := _materials().duplicate()
+	fm.merge(_facade_materials())
+	var fs := Facades.build(self, PLAN.OPS, PLAN.EXTENT, fm, STYLE)
+	Game.log_ev("Map", "facades", {"map": id, "stats": fs})
 	_hall_trusses()
 	_scenery()
 	MapDecor.dress_boxes(self)

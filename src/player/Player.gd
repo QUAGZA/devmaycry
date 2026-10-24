@@ -80,6 +80,9 @@ var carrying_core := false
 var frozen := false
 var zip_t := 0.0
 var ladder_t := 0.0                 # > 0 while inside a ladder volume (set by Features.Ladder)
+var interact_buffer_t := 0.0         # a tap of E stays 'held' for a moment so a short press still attaches (zipline)
+var ladder_ignore_t := 0.0            # > 0 right after stepping off a ladder's foot (the volume cannot re-grab)
+var ladder_base_y := 0.0           # floor height at the foot of the ladder the player is on
 var ladder_out := Vector3.FORWARD
 var ladder_top := 0.0
 const CLIMB_SPEED := 4.2
@@ -445,6 +448,8 @@ func server_step(delta: float) -> void:
 	head.rotation.x = pitch
 	var pressed := inp_buttons & ~_prev_buttons
 	_prev_buttons = inp_buttons
+	if (pressed & BTN_INTERACT) != 0:
+		interact_buffer_t = 0.35
 	if not alive or frozen:
 		velocity = Vector3.ZERO
 		if alive and not is_on_floor():
@@ -525,6 +530,11 @@ func _step_ladder(delta: float, pressed: int) -> void:
 	ladder_t -= delta
 	var wish := Basis(Vector3.UP, yaw) * Vector3(inp_move.x, 0.0, inp_move.y)
 	var toward := wish.dot(-ladder_out)
+	if toward < -0.25 and is_on_floor() and global_position.y < ladder_base_y + 0.45:
+		# at the foot and still walking away: step off instead of being held on the ladder volume
+		ladder_t = 0.0
+		ladder_ignore_t = 0.5
+		return
 	if (pressed & BTN_JUMP) != 0:
 		velocity = ladder_out * 5.0 + Vector3.UP * 3.5
 		ladder_t = 0.0
@@ -633,6 +643,8 @@ func _tick_timers(delta: float) -> void:
 	stagger_t = maxf(0.0, stagger_t - delta)
 	spawn_protect_t = maxf(0.0, spawn_protect_t - delta)
 	zip_t = maxf(0.0, zip_t - delta)
+	ladder_ignore_t = maxf(0.0, ladder_ignore_t - delta)
+	interact_buffer_t = maxf(0.0, interact_buffer_t - delta)
 	launch_t = maxf(0.0, launch_t - delta)
 	switch_t = maxf(0.0, switch_t - delta)
 	if spray_t > 0.0:

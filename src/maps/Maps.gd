@@ -7,9 +7,9 @@ extends RefCounted
 
 static func list() -> Array:
 	return [
-		{"id": "oracle_gardens", "name": "ORACLE GARDENS", "mechanic": "PHASE GATES", "blurb": "Temples, terraces and a sunken basin around a fractured sanctuary.", "test": false},
-		{"id": "tideline_exchange", "name": "TIDELINE EXCHANGE", "mechanic": "ZIPLINES + LADDERS", "blurb": "Covered cargo exchange over the sea: catwalks, loading channels and cable crossings.", "test": false},
-		{"id": "vector_foundry", "name": "VECTOR FOUNDRY", "mechanic": "LAUNCH PADS + PORTALS", "blurb": "Looping kinetic facility around a reactor, with a watchtower and a service tunnel.", "test": false},
+		{"id": "oracle_gardens", "name": "ORACLE GARDENS", "mechanic": "PHASE GATES", "blurb": "Narrow sanctuary streets and walled courts: a roofed temple vault, an octagonal court, raised garden terraces joined by arcades, a sunken basin. Phase gates rotate each home side.", "test": false},
+		{"id": "tideline_exchange", "name": "TIDELINE EXCHANGE", "mechanic": "ZIPLINES + LADDERS", "blurb": "Dockyard over the sea: a 14 m exchange hall with galleries and crossing cables, a gantry quay, warehouse passages and a sunken loading channel. Ladders and ziplines connect the levels.", "test": false},
+		{"id": "vector_foundry", "name": "VECTOR FOUNDRY", "mechanic": "LAUNCH PADS + PORTALS", "blurb": "Ring-and-spoke foundry: a roofed reactor inside a walled ring street, a watchtower with elevated walkways, launch pads and a roofed service tunnel.", "test": false},
 		{"id": "dev_test_arena", "name": "DEVELOPER TEST ARENA (TEST MAP)", "mechanic": "PHASE GATES", "blurb": "Original open plaza kept for testing. Not a presentation map.", "test": true},
 	]
 

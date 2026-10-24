@@ -242,6 +242,11 @@ func _decide() -> void:
 	var ms := Game.match_server
 	if ms == null:
 		return
+	if Game.args.has("bot-goal"):
+		# test hook: every bot walks to one point (x,y,z), e.g. to exercise ladders and stairs
+		var v := str(Game.args["bot-goal"]).split(",")
+		_set_goal(Vector3(float(v[0]), float(v[1]), float(v[2])), "patrol")
+		return
 	var rules = ms.rules
 	if rules == null:
 		_decide_warmup()

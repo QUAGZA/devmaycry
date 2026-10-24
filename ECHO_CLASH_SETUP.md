@@ -72,6 +72,11 @@ powershell -File tools\net_test.ps1 -Clients 2 -Bots -Mode hot_return -Port 2500
 powershell -File tools\godot.ps1 --headless -- --role=host --practice --mode=hot_return --map=oracle_gardens --routeprobe --quit-after-sec=5
 powershell -File tools\screenshot.ps1 -Map tideline_exchange -Mode hot_return -Bots
 powershell -File tools\package.ps1
+powershell -File tools\map_checks.ps1 -Maps oracle_gardens   # route, reach, feature, perimeter and sight probes (engine side)
+powershell -File tools\retrieve_test.ps1                       # Reverse Entropy retrieval scenarios on the three maps
+powershell -File tools\bot_soak.ps1 -Seconds 120               # bot matches on the three maps, event summary
+python tools\mapproto\oracle.py [gen]                          # offline plan analysis; `gen` rewrites src/maps/plans/ and the setup-screen preview
+python tools\speck_check.py build\shots\*.png                  # black-speckle detector for screenshots
 ```
 
 Headless user arguments (after `--`): `--role=host|join|code`, `--ip`, `--port`, `--code`, `--practice`,
@@ -79,5 +84,5 @@ Headless user arguments (after `--`): `--role=host|join|code`, `--ip`, `--port`,
 `--ffa_size`, `--bot_difficulty`, `--auto=<pattern|seq:...>`, `--log-snap`, `--quit-after-sec`, `--screenshot-at`,
 `--screenshot-title`, `--force-windowed`, `--routeprobe`, `--navprobe`, `--kill-local-at`, `--open-map-at`,
 `--allow-empty-team`, `--settings-test=write|read`, `--settings-path=user://<file>`, `--open-settings`, `--perf`, `--winprobe`,
-`--switch_policy=every_round|halves`, `--diag=<flags>` (rendering isolation), `--bot-trace`. Map ids: `oracle_gardens`, `tideline_exchange`,
+`--switch_policy=every_round|halves`, `--diag=<flags>` (rendering isolation), `--bot-trace`, `--bot-goal=x,y,z` (every bot walks there), `--reachprobe`, `--featureprobe`, `--perimeterprobe`, `--sightprobe`, `--navlayers=<mask>` (with `--navprobe`), `--cam="x,y,z,yaw,pitch[,fov[,ortho_height]];..."` with `--roofs=off` and `--hide-ui` (review cameras, one per screenshot), `--open-screen=setup|host|join|settings|controls|credits`, `--skip-intro`, `--intro-skip-at=<s>`, `--return-menu-at=<s>`, `--pause-at=<s>`. Map ids: `oracle_gardens`, `tideline_exchange`,
 `vector_foundry`, `dev_test_arena` (and `legacy_tideline`, `legacy_foundry`).
