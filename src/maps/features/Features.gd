@@ -242,6 +242,7 @@ class Zipline extends Node3D:
 	var anchors: Array = []
 	var riders: Dictionary = {}
 	var lockout: Dictionary = {}
+	var needs_release: Dictionary = {}   # rider id -> true until the interact key has been let go (HOLD E must not re-attach after the ride)
 	var refused: Dictionary = {}
 	var disabled_reason := ""
 
@@ -357,8 +358,14 @@ class Zipline extends Node3D:
 			refused[id] -= delta
 			if refused[id] <= 0.0:
 				refused.erase(id)
+		for id in needs_release.keys():
+			var rp = Game.players.get(id)
+			if rp == null or not is_instance_valid(rp) or not (rp.interact_held or rp.interact_buffer_t > 0.0):
+				needs_release.erase(id)
 		for i in anchors.size():
 			for p in Features.players_in(anchors[i]):
+				if needs_release.has(p.id):
+					continue
 				if riders.has(p.id) or lockout.has(p.id) or not (p.interact_held or p.interact_buffer_t > 0.0) or p.zip_t > 0.0:
 					continue
 				if disabled_reason != "":
@@ -411,6 +418,7 @@ class Zipline extends Node3D:
 				p.zip_t = 0.0
 				riders.erase(id)
 				lockout[id] = LOCKOUT
+				needs_release[id] = true
 				Game.log_ev("Feature", "zip_blocked", {"id": id, "zip": zip_name})
 				continue
 			r["last"] = pos
@@ -423,6 +431,7 @@ class Zipline extends Node3D:
 				p.zip_t = 0.0
 				p.velocity = dir * 3.0
 				lockout[id] = LOCKOUT
+				needs_release[id] = true
 				Game.log_ev("Feature", "zip_detach", {"id": id, "zip": zip_name, "moved": snappedf(float(spot2["moved"]), 0.01)})
 
 	func drop_all() -> void:

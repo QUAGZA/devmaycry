@@ -77,6 +77,7 @@ func _build_layout() -> void:
 	fm.merge(_facade_materials())
 	var fs := Facades.build(self, PLAN.OPS, PLAN.EXTENT, fm, STYLE)
 	Game.log_ev("Map", "facades", {"map": id, "stats": fs})
+	_stair_wedges()
 	_reactor_machinery()
 	_scenery()
 	MapDecor.dress_boxes(self)
@@ -149,3 +150,42 @@ func _scenery() -> void:
 		MapDecor._mesh(features, MapDecor._boxm(Vector3(8.0, 1.0, 8.0)), p + Vector3(0, cm.height, 0), orange_e)
 	for zs in [-1.0, 1.0]:
 		MapDecor.strut(features, Vector3(-60, 14.0, zs * 52.0), Vector3(60, 14.0, zs * 52.0), 0.5, steel)
+		# the pipe run used to hang in the sky with nothing under it: give it pylons down to the ground plane
+		for px in [-60.0, -20.0, 20.0, 60.0]:
+			MapDecor._mesh(features, MapDecor._boxm(Vector3(1.4, 18.0, 1.4)), Vector3(px, 5.4, zs * 52.0), steel)
+
+
+## MapKit.stairs() collides as a thin ramp but is drawn as solid steps, so a player could walk into the side of a
+## flight and stand inside the drawn stairs. Put a solid wedge (invisible; the steps already draw it) under every
+## flight, 0.1 m below the walking surface, so the flight is as solid as it looks. Not in the navgeo group: the
+## ramp stays the only navigation surface.
+func _stair_wedges() -> void:
+	for op in PLAN.OPS:
+		if str(op["op"]) != "stairs":
+			continue
+		var lo := PlanRunner._v3(op["low"])
+		var hi := PlanRunner._v3(op["high"])
+		var w := float(op["w"])
+		var flat := Vector3(hi.x - lo.x, 0.0, hi.z - lo.z)
+		var run := flat.length()
+		if run < 0.5:
+			continue
+		var dir := flat / run
+		var side := Vector3(-dir.z, 0.0, dir.x)
+		var pts := PackedVector3Array()
+		for sgn in [-0.5, 0.5]:
+			for ends in [0, 1]:
+				var base_xz: Vector3 = Vector3(lo.x, 0.0, lo.z) + dir * (run * float(ends)) + side * (w * float(sgn))
+				var top_y: float = lo.y + (hi.y - lo.y) * float(ends) - 0.1
+				pts.append(Vector3(base_xz.x, minf(lo.y, hi.y) - 0.3, base_xz.z))
+				pts.append(Vector3(base_xz.x, top_y, base_xz.z))
+		var body := StaticBody3D.new()
+		body.name = "StairWedge"
+		body.collision_layer = 1
+		body.collision_mask = 0
+		var cs := CollisionShape3D.new()
+		var sh := ConvexPolygonShape3D.new()
+		sh.points = pts
+		cs.shape = sh
+		body.add_child(cs)
+		geometry.add_child(body)

@@ -67,7 +67,104 @@ func _run(def: MapDef, ops: Array, extent: Vector2, mats: Dictionary, style: Dic
 		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		def.features.add_child(mmi)
 		made += xf.size()
-	return {"faces": _faces, "instances": made, "kinds": _kinds.size()}
+	var cuts := clear_doorways(def, ops)
+	return {"faces": _faces, "instances": made, "kinds": _kinds.size(), "doorway_cuts": cuts}
+
+
+## Facades dresses every room face with a plinth, pilasters and trim bands that ignore the doorways: a pilaster
+## stood in the middle of the hall and warehouse doors and a 0.6 m plinth strip lay across every threshold, none of
+## it solid (so the doorway looked barred but could be walked through). Cut
+## every box-shaped facade instance that overlaps a doorway opening: pilasters are dropped, long strips are split
+## around the opening. Returns the number of instances removed or split.
+static func clear_doorways(def: MapDef, ops: Array) -> int:
+	var openings: Array = []     # [axis (0 = along x, 1 = along z), lo, hi, depth_lo, depth_hi, y0, y1]
+	for op in ops:
+		if str(op["op"]) != "room":
+			continue
+		var r: Array = op["r"]
+		var x0 := float(r[0])
+		var z0 := float(r[1])
+		var x1 := float(r[2])
+		var z1 := float(r[3])
+		var t := float(op.get("t", 0.8))
+		var fl := float(op.get("floor", 0.0))
+		var doors: Dictionary = op.get("doors", {})
+		for k in doors:
+			for d in doors[k]:
+				var off := float(d[0])
+				var half := float(d[1]) * 0.5
+				match k:
+					"n":
+						var c := (x0 + x1) * 0.5 + off
+						openings.append([0, c - half, c + half, z0 - 0.6, z0 + t + 0.1, fl, fl + PlanRunner.DOOR_H])
+					"s":
+						var c2 := (x0 + x1) * 0.5 + off
+						openings.append([0, c2 - half, c2 + half, z1 - t - 0.1, z1 + 0.6, fl, fl + PlanRunner.DOOR_H])
+					"w":
+						var c3 := (z0 + z1) * 0.5 + off
+						openings.append([1, c3 - half, c3 + half, x0 - 0.6, x0 + t + 0.1, fl, fl + PlanRunner.DOOR_H])
+					_:
+						var c4 := (z0 + z1) * 0.5 + off
+						openings.append([1, c4 - half, c4 + half, x1 - t - 0.1, x1 + 0.6, fl, fl + PlanRunner.DOOR_H])
+	var changed := 0
+	for node in def.features.get_children():
+		if not (node is MultiMeshInstance3D):
+			continue
+		var kind := str(node.name).trim_prefix("Facade_")
+		if not (kind in ["plinth", "trim", "band", "hazard", "glass", "glass_lit"]):
+			continue
+		var mm := (node as MultiMeshInstance3D).multimesh
+		var keep: Array = []
+		for i in mm.instance_count:
+			var xf := mm.get_instance_transform(i)
+			var pieces: Array = [xf]
+			for o in openings:
+				var next: Array = []
+				for pxf in pieces:
+					var px: Transform3D = pxf
+					var bx := px.basis.x
+					var bz := px.basis.z
+					var by := px.basis.y
+					var along_x := absf(bx.x) > absf(bx.z)
+					# the facade box must run along the opening's wall
+					if along_x != (int(o[0]) == 0):
+						next.append(px)
+						continue
+					var depth_c := px.origin.z if along_x else px.origin.x
+					var depth_half := (absf(bz.z) if along_x else absf(bz.x)) * 0.5
+					var len_c := px.origin.x if along_x else px.origin.z
+					var len_half := (absf(bx.x) if along_x else absf(bx.z)) * 0.5
+					var y_half := by.length() * 0.5
+					if depth_c + depth_half < float(o[3]) or depth_c - depth_half > float(o[4]) or px.origin.y - y_half >= float(o[6]) or px.origin.y + y_half <= float(o[5]):
+						next.append(px)
+						continue
+					var lo := len_c - len_half
+					var hi := len_c + len_half
+					if hi <= float(o[1]) or lo >= float(o[2]):
+						next.append(px)
+						continue
+					changed += 1
+					if hi - lo > 1.0:      # a long strip: keep what lies outside the opening
+						for seg in [[lo, minf(hi, float(o[1]))], [maxf(lo, float(o[2])), hi]]:
+							if float(seg[1]) - float(seg[0]) > 0.05:
+								var piece := px
+								var centre: float = (float(seg[0]) + float(seg[1])) * 0.5
+								var scale: float = (float(seg[1]) - float(seg[0])) / (hi - lo)
+								piece.basis.x = bx * scale
+								if along_x:
+									piece.origin.x = centre
+								else:
+									piece.origin.z = centre
+								next.append(piece)
+					# pilasters, window frames and glass inside the opening are dropped
+				pieces = next
+			for pxf in pieces:
+				keep.append(pxf)
+		if keep.size() != mm.instance_count:
+			mm.instance_count = keep.size()
+			for i in keep.size():
+				mm.set_instance_transform(i, keep[i])
+	return changed
 
 
 # ---------------------------------------------------------------- occupancy grid

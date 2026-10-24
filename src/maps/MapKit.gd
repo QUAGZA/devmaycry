@@ -37,6 +37,9 @@ static func walls(def: MapDef, pts: Array, h: float, thick: float, mat: Material
 
 ## Solid extruded polygon: top face at `top`, `thick` deep. Used for floors, terraces, platforms, roofs.
 static func slab(def: MapDef, pts: PackedVector2Array, top: float, thick: float, mat: Material, walkable := true, record := true) -> StaticBody3D:
+	if not Geometry2D.is_polygon_clockwise(pts):
+		pts = pts.duplicate()
+		pts.reverse()   # the side winding below is only front-facing for polygons Godot reports as clockwise
 	var tris := Geometry2D.triangulate_polygon(pts)
 	if tris.is_empty():
 		push_warning("MapKit.slab: polygon could not be triangulated")
@@ -56,6 +59,12 @@ static func slab(def: MapDef, pts: PackedVector2Array, top: float, thick: float,
 			b = c
 			c = t
 		for v in [a, b, c]:
+			st.set_uv(Vector2(v.x, v.z) * 0.25)
+			st.add_vertex(v)
+			faces.append(v)
+		# underside: same triangle at `bot`, wound the other way, so roofs, gantry decks and mezzanines are
+		# not see-through from below (the materials are back-face culled)
+		for v in [Vector3(a.x, bot, a.z), Vector3(c.x, bot, c.z), Vector3(b.x, bot, b.z)]:
 			st.set_uv(Vector2(v.x, v.z) * 0.25)
 			st.add_vertex(v)
 			faces.append(v)
@@ -129,6 +138,10 @@ static func floor_with_holes(def: MapDef, outline: PackedVector2Array, holes: Ar
 
 ## Walkable ramp with visual steps (collision is the smooth ramp so movement never snags).
 static func stairs(def: MapDef, low: Vector3, high: Vector3, width: float, mat: Material, step_mat: Material = null) -> void:
+	if low.y > high.y:
+		var t := low   # callers sometimes pass the high end first; treads and ramp both assume low.y < high.y
+		low = high
+		high = t
 	var ramp := def.slope(low, high, width, 0.35, mat)
 	var mi_ramp := ramp.get_child(1) as MeshInstance3D
 	if mi_ramp != null:

@@ -10,6 +10,13 @@ ladders climb the tower.  Gates link the two yards on each home side (they refus
   tunnel : enemy bay south door -> lane -> pit stairs -> tunnel (bulkheads, fields) -> pit stairs -> lane -> berth
   north  : bay north door -> north yard -> north street -> ring north opening / tower plaza
   upper  : landing decks + walkways (y 6) + tower: stairs for carriers, launch pads and ladders for the rest
+
+Authoring rules this plan now follows (each was a player-facing defect):
+  - an elevated deck that is not a solid platform must sit over a free rect or a block that ends below it; the fill otherwise
+    buries it (solidify() reserves only free areas, rooms, sunken holes and solid slabs)
+  - launch pads and phase gates stand off the shortest-path lines and clear of walls (they trigger on overlap), roughly 2.5 m
+  - covers and barricades hug one wall of their lane and leave >= 2.4 m (two gaps under 1.5 m close the lane for the navmesh)
+  - stairs need a landing at the foot; ladders stand ~0.5 m off the wall they climb (the wall face is the climber's guide)
 """
 import math
 import os
@@ -62,6 +69,8 @@ def build():
     P.platform([(x, z) for x, z in ngon(15.2, 24, -7.5)], 11.5, mat="roof", solid=False, thick=0.5, walk=False, mirror=False, roof=True)
     P.free_poly(ngon(14.5, 24, -7.5), mirror=False)                          # reactor interior
     P.cover("cyl", 0, 0, (2.3, 9.0), mat="steel", mirror=False)              # reactor core
+    for a in (0, 90, 180, 270):                                                # the roof is closed now: lamps under it so the hall is readable
+        P.light(round(10.0 * math.cos(math.radians(a)), 2), 10.2, round(10.0 * math.sin(math.radians(a)), 2), "FFC890", 1.5, 17.0, mirror=False)
     for a in (0, 90, 180, 270):
         x, z = 8.8 * math.cos(math.radians(a)), 8.8 * math.sin(math.radians(a))
         yaw = math.degrees(math.atan2(-math.cos(math.radians(a)), -math.sin(math.radians(a))))
@@ -99,7 +108,7 @@ def build():
 
     # ---------------------------------------------------------------- north: yard, street, tower plaza, decks
     P.free(-45, -24, -41, -9)                  # bay north-door lane
-    P.free(-64, -33, -38, -24)                 # north-west yard
+    P.free(-64, -33, -38, -23)                 # north-west yard (the 1 m strip to z -23 is walkable ground: the stairs need a landing at their foot)
     P.free(-38, -40, -2.5, -31)                # north street (walkway above its north half)
     P.free(-8, -40, 8, -31)                    # tower plaza (T-junction behind the generator house)
     P.free(-2.5, -31, 2.5, -22)                # north spoke
@@ -109,19 +118,26 @@ def build():
     P.block(-27, -40, -23, -33.6, 4.5, "cover_machine")                         # pinch the north street (gap south)
     P.cover("box", -15, -34.5, (2.6, 1.3, 2.6), 0, "cover_machine")
     P.cover("box", -34, -32.5, (2.6, 1.3, 2.6), 0, "cover_machine")
-    # landing deck + walkway + tower
-    P.platform([-58, -40, -46, -34], TW, mat="steel", solid=False, thick=0.5)
-    P.platform([(-46, -39.2), (-3.5, -39.2), (-3.5, -35.6), (-46, -35.6)], TW, mat="steel", solid=False, thick=0.4)
+    # landing deck + walkway + tower.  The deck and the first walkway section stand on a 5.5 m abutment (the fill must not cover
+    # them: free rects reserve the footprint); east of x = -38 the walkway crosses over the north street.
+    P.free(-51.0, -40, -38, -33)
+    P.free(-57, -38, -51.0, -33)
+    P.block(-51.0, -40, -38, -33, 5.5, "wall_b")
+    P.block(-57, -38, -51.0, -33, 5.5, "wall_b")
+    P.platform([-57, -38, -50.6, -33], TW, mat="steel", solid=False, thick=0.5)          # sections overlap by 0.4-0.5 m (same level, no seam)
+    P.platform([-51.0, -40, -38, -33], TW, mat="steel", solid=False, thick=0.5)
+    P.platform([-38.5, -39.2, -3.5, -35.6], TW, mat="steel", solid=False, thick=0.5)
     P.block(-4, -40, 4, -31, 5.6, "wall_b", mirror=False)                       # generator house carries the tower deck
     P.platform([(x, z - 34.0) for x, z in ngon(4.8, 8, 22.5)], TW, mat="steel", solid=False, thick=0.5, mirror=False)
+    P.platform([-4.5, -39.2, 4.5, -35.6], TW, mat="steel", solid=False, thick=0.5, mirror=False)               # joins both walkways to the tower deck at one level (no 0.4 m ledge on the house roof)
     P.block(-1.7, -38.8, 1.7, -33.2, 3.4, "wall_b", y0=TW, mirror=False)               # control cabin: no straight line along both walkways
-    P.wall((-46, -39.0), (-3.5, -39.0), 1.1, 0.25, "hazard", y0=TW)
+    P.wall((-38, -39.0), (-3.5, -39.0), 1.1, 0.25, "hazard", y0=TW)
     P.column(-24, -36.4, TW - 0.4, 0.3, mat="steel")
-    P.stairs((-54, 0, -25), (-54, TW, -34), 3.6)                           # carriers' way up (north-west yard)
-    P.ladder((-5.4, 0, -34.0), TW, (-1, 0), "T1", "T1", mirror=False)           # tower ladders, west and east faces
-    P.ladder((5.4, 0, -34.0), TW, (1, 0), "T2", "T2", mirror=False)
-    P.sling((-39.5, 0, -28), (-50, TW, -37), 1.3, "N1", "N1")                  # launch pad: lane -> landing deck
-    P.cover("box", -53, -38.1, (2.2, 1.0, 0.9), 0, "cover_machine", y0=TW)
+    P.stairs((-54, 0, -23.5), (-54, TW, -33), 3.6)                           # carriers' way up (north-west yard), meets the abutment face
+    P.ladder((-4.55, 0, -34.0), TW, (-1, 0), "T1", "T1", mirror=False)           # tower ladders, west and east faces
+    P.ladder((4.55, 0, -34.0), TW, (1, 0), "T2", "T2", mirror=False)
+    P.sling((-58.2, 0, -26.8), (-50, TW, -37), 1.3, "N1", "N1")                # launch pad: yard -> landing deck (west end of the yard, off the traffic lines, clear of walls)
+    P.cover("box", -53.5, -36.0, (2.2, 1.0, 0.9), 0, "cover_machine", y0=TW)
     P.cover("box", -34, -38.0, (2.2, 1.0, 0.9), 0, "cover_machine", y0=TW)
     P.cover("box", -14, -38.0, (2.2, 1.0, 0.9), 0, "cover_machine", y0=TW)
 
@@ -130,15 +146,13 @@ def build():
     P.free(-62, 14, -49, 22)                   # home berth (stabilizer)
     P.free(-49, 21, -40, 26)                   # lane east to the pit
     P.free(-44, 26, -34, 27)                   # pit head
-    P.free(-26, 12, -6, 17)                    # south-west yard (ring south opening side)
     P.free(-2.5, 21, 2.5, 26)                  # south spoke
     P.free(-14, 24, 14, 27)                    # south street along the tunnel block
-    P.block(-30, 16, -26, 22.5, 4.0, "cover_machine")
-    P.cover("box", -18, 21, (3.0, 1.3, 2.6), 0, "cover_machine")
-    P.cover("box", -9, 25.5, (2.6, 1.3, 1.2), 0, "cover_machine")
+    P.cover("box", -9, 24.6, (2.6, 1.3, 1.2), 0, "cover_machine")
     P.sunken(-44, 27, 44, 35, TUN, mirror=False)                              # service tunnel + pits
-    P.block(-34, 27, 34, 35, 9.5, "wall_c", y0=-0.5, mirror=False)             # roof and the south block above it
-    P.stairs((-41, 0, 27), (-41, TUN, 33), 4.0)                                # carrier entry/exit at the pits
+    P.block(-34, 27, 34, 35, 9.0, "wall_c", mirror=False)                       # the south block above the tunnel
+    P.block(-34, 27, 34, 35, 0.5, "wall_c", y0=-0.5, mirror=False)             # tunnel ceiling slab (2.7 m headroom)
+    P.stairs((-41, TUN, 33), (-41, 0, 27), 4.0)                                # carrier entry/exit at the pits
     P.block(-30, 27, -29, 31, 2.6, "wall_c", y0=TUN)                           # bulkheads: gaps alternate sides
     P.block(-22, 31, -21, 35, 2.6, "wall_c", y0=TUN)
     P.block(-14, 27, -13, 31, 2.6, "wall_c", y0=TUN)
@@ -147,20 +161,20 @@ def build():
         P.light(gx, TUN + 2.2, 31, "FFB070", 1.1, 8.0, mirror=False)
 
     # ---------------------------------------------------------------- gates: home-side rotations (refuse the Core)
-    P.gate((-62.5, 0, -28.5), -90, (-43.0, 0, 23.5), 90, "I")
-    P.gate((62.5, 0, -28.5), 90, (43.0, 0, 23.5), -90, "II")
+    P.gate((-42.0, 0, -27.5), 90, (-42.5, 0, 22.0), 180, "I")
+    P.gate((42.0, 0, -27.5), -90, (42.5, 0, 22.0), 180, "II")
 
     # ---------------------------------------------------------------- spawn yard cover
     P.cover("box", -66.2, 3.4, (1.2, 2.6, 4.0), 0, "cover_machine")
     P.cover("box", -66.2, -3.4, (1.2, 1.3, 2.6), 0, "cover_machine")
     P.cover("box", -62, 16.5, (2.6, 1.3, 2.6), 0, "cover_machine")
-    P.cover("box", -63, -20, (2.6, 1.3, 2.6), 0, "cover_machine")
+    P.cover("box", -64.2, -21.5, (1.6, 1.3, 2.6), 0, "cover_machine")          # against the west wall of the exit: 2.4 m stays free
 
     # ---------------------------------------------------------------- temporal barricades (restorable cover)
-    P.prop(-30, 4.5, (2.6, 1.6, 0.5), 90, color="E2B07A")                      # west spoke
-    P.prop(-43, -16, (3.0, 1.6, 0.5), 0, color="E2B07A")                       # north lane
+    P.prop(-34, 1.2, (2.6, 1.6, 0.5), 90, color="E2B07A")                      # west spoke (hugs the south wall: 2.4 m lane stays free)
+    P.prop(-44.6, -16, (3.0, 1.6, 0.5), 90, color="E2B07A")                    # north lane (along the west wall: 3.3 m lane stays free)
     P.prop(-12, -34, (3.0, 1.6, 0.5), 0, color="E2B07A")                       # north street
-    P.prop(-45, 23.5, (3.0, 1.6, 0.5), 0, color="E2B07A")                      # pit lane
+    P.prop(-47.5, 25.7, (3.0, 1.6, 0.5), 0, color="E2B07A")                    # pit lane (against the south wall)
     for a in (45, 225):                                                         # ring street barricades hug the outer wall
         px, pz = 20.3 * math.cos(math.radians(a)), 20.3 * math.sin(math.radians(a))
         pyaw = math.degrees(math.atan2(-math.cos(math.radians(a)), -math.sin(math.radians(a))))

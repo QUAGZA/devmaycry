@@ -82,10 +82,35 @@ func _backdrop() -> void:
 	features.add_child(ground)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 9181
+	# Scenery has no collision, so it must stay clear of the playable outline: the big cliff pieces are up to 24 m tall
+	# and 30+ m wide, and a few of them used to lean over the north perimeter and stand inside the east reliquary yard
+	# in front of Phase Gate II. Each piece is pushed outward until its footprint clears the outline by 4 m.
+	var keep_out: Array = Geometry2D.offset_polygon(outline, 4.0)
 	for i in 30:
 		var t := float(i) / 30.0 * TAU
 		var p := Vector3(cos(t) * rng.randf_range(84.0, 98.0), -2.0, sin(t) * rng.randf_range(54.0, 66.0))
 		var pick: String = ["cliff_large_stone.glb", "cliff_block_stone.glb", "cliff_corner_stone.glb", "cliff_half_stone.glb"][i % 4]
-		MapDecor.place(features, MapDecor.NATURE + pick, p, rng.randf_range(10.0, 24.0), rad_to_deg(-t) + 90.0, "cliff", Color(0.62, 0.57, 0.5))
+		var cliff := MapDecor.place(features, MapDecor.NATURE + pick, p, rng.randf_range(10.0, 24.0), rad_to_deg(-t) + 90.0, "cliff", Color(0.62, 0.57, 0.5))
+		_clear_of_outline(cliff, keep_out)
 		if i % 2 == 0:
-			MapDecor.place(features, MapDecor.NATURE + ["tree_oak.glb", "tree_default.glb", "tree_cone.glb"][i % 3], p * 0.9, rng.randf_range(8.0, 13.0), rng.randf() * 360.0, "foliage", Color(0.5, 0.66, 0.46))
+			var tree := MapDecor.place(features, MapDecor.NATURE + ["tree_oak.glb", "tree_default.glb", "tree_cone.glb"][i % 3], p * 0.9, rng.randf_range(8.0, 13.0), rng.randf() * 360.0, "foliage", Color(0.5, 0.66, 0.46))
+			_clear_of_outline(tree, keep_out)
+
+
+## Moves a scenery model radially outward (about the map centre) until its footprint no longer touches `keep_out`.
+func _clear_of_outline(m: Node3D, keep_out: Array) -> void:
+	if m == null:
+		return
+	for _step in 60:
+		var bb: AABB = MapDecor._bounds(m)
+		var rect := PackedVector2Array([Vector2(bb.position.x, bb.position.z), Vector2(bb.end.x, bb.position.z), Vector2(bb.end.x, bb.end.z), Vector2(bb.position.x, bb.end.z)])
+		var hit := false
+		for poly in keep_out:
+			if not Geometry2D.intersect_polygons(rect, poly).is_empty():
+				hit = true
+				break
+		if not hit:
+			return
+		m.position.x *= 1.03
+		m.position.z *= 1.03
+	m.visible = false   # could not be placed clear of the map: drop it rather than leave it inside
